@@ -5,7 +5,7 @@
               companyCopyright="2024" companyWebsite="https://github.com/ianfletcher314/voxproc"
               pluginFormats="buildAU,buildVST3" pluginCharacteristicsValue=""
               pluginName="VoxProc" pluginDesc="Vocal processing plugin with compression, de-essing, and EQ"
-              pluginManufacturer="VoxProc" pluginManufacturerCode="VoxP" pluginCode="Vxpc"
+              pluginManufacturer="Fletcher" pluginManufacturerCode="VoxP" pluginCode="Vxpc"
               pluginVST3Category="Fx" pluginAUMainType="'aufx'">
   <MAINGROUP id="MAINGRP" name="VoxProc">
     <GROUP id="SOURCE" name="Source">

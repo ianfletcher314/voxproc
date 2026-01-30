@@ -1,68 +1,74 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-// Color scheme
+// PDLBRD-style earth tone colors (muted metallic look)
 namespace VoxColors {
-    const juce::Colour background = juce::Colour(0xff1a1a2e);
-    const juce::Colour panelBg = juce::Colour(0xff16213e);
-    const juce::Colour panelBorder = juce::Colour(0xff0f3460);
-    const juce::Colour accent = juce::Colour(0xff4a9eff);
-    const juce::Colour accentOrange = juce::Colour(0xffe94560);
-    const juce::Colour accentGreen = juce::Colour(0xff00d4aa);
-    const juce::Colour textPrimary = juce::Colour(0xffeaeaea);
-    const juce::Colour textSecondary = juce::Colour(0xff888888);
-    const juce::Colour meterGreen = juce::Colour(0xff22c55e);
-    const juce::Colour meterYellow = juce::Colour(0xffeab308);
-    const juce::Colour meterRed = juce::Colour(0xffef4444);
+    const juce::Colour background   = juce::Colour(0xff1a1a1a);  // Dark background
+    const juce::Colour panelComp    = juce::Colour(0xff8b4513);  // Saddle brown (compressor)
+    const juce::Colour panelDeEss   = juce::Colour(0xff2c5545);  // Dark teal (de-esser)
+    const juce::Colour panelEQ      = juce::Colour(0xff4a5568);  // Muted gray (EQ)
+    const juce::Colour panelBorder  = juce::Colour(0xff333333);
+    const juce::Colour textPrimary  = juce::Colour(0xffeaeaea);
+    const juce::Colour textSecondary = juce::Colour(0xffaaaaaa);
+    const juce::Colour metal        = juce::Colour(0xffc0c0c0);  // Brushed metal
+    const juce::Colour screw        = juce::Colour(0xff505050);
+    const juce::Colour led          = juce::Colour(0xffff3333);  // LED red
+    const juce::Colour meterGreen   = juce::Colour(0xff22c55e);
+    const juce::Colour meterYellow  = juce::Colour(0xffeab308);
+    const juce::Colour meterRed     = juce::Colour(0xffef4444);
+    const juce::Colour lcdGreen     = juce::Colour(0xff88cc88);  // LCD display green
 }
 
 //==============================================================================
-// VoxProcLookAndFeel
+// Helper functions for drawing PDLBRD-style components
 //==============================================================================
-void VoxProcLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
-                                           float sliderPosProportional, float, float,
-                                           juce::Slider&)
+static void drawScrew(juce::Graphics& g, float x, float y, float size)
 {
-    auto bounds = juce::Rectangle<float>((float)x, (float)y, (float)width, (float)height).reduced(2.0f);
-    float cx = bounds.getCentreX();
-    float cy = bounds.getCentreY();
-    float radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f - 2.0f;
-
     // Outer ring
-    g.setColour(juce::Colour(0xff2a2a4a));
-    g.fillEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
+    g.setColour(VoxColors::screw.darker(0.3f));
+    g.fillEllipse(x - size/2, y - size/2, size, size);
 
-    // Main knob body
-    float innerRadius = radius * 0.8f;
-    juce::ColourGradient knobGradient(juce::Colour(0xff3a3a5a), cx - innerRadius * 0.5f, cy - innerRadius * 0.5f,
-                                       juce::Colour(0xff252535), cx + innerRadius * 0.5f, cy + innerRadius * 0.5f, true);
-    g.setGradientFill(knobGradient);
-    g.fillEllipse(cx - innerRadius, cy - innerRadius, innerRadius * 2.0f, innerRadius * 2.0f);
+    // Inner hex pattern
+    g.setColour(VoxColors::screw.brighter(0.2f));
+    g.fillEllipse(x - size/3, y - size/3, size * 0.66f, size * 0.66f);
 
-    // Indicator arc (background)
-    juce::Path arcBg;
-    float arcRadius = radius - 3.0f;
-    float startAngle = juce::MathConstants<float>::pi * 1.25f;
-    float endAngle = juce::MathConstants<float>::pi * 2.75f;
-    arcBg.addCentredArc(cx, cy, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
-    g.setColour(juce::Colour(0xff1a1a2a));
-    g.strokePath(arcBg, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    // Hex slot
+    juce::Path hex;
+    float r = size * 0.22f;
+    for (int i = 0; i < 6; ++i)
+    {
+        float angle = i * juce::MathConstants<float>::pi / 3.0f - juce::MathConstants<float>::pi / 6.0f;
+        float px = x + r * std::cos(angle);
+        float py = y + r * std::sin(angle);
+        if (i == 0)
+            hex.startNewSubPath(px, py);
+        else
+            hex.lineTo(px, py);
+    }
+    hex.closeSubPath();
+    g.setColour(VoxColors::screw.darker(0.5f));
+    g.fillPath(hex);
+}
 
-    // Indicator arc (value)
-    juce::Path arcVal;
-    float valueAngle = startAngle + sliderPosProportional * (endAngle - startAngle);
-    arcVal.addCentredArc(cx, cy, arcRadius, arcRadius, 0.0f, startAngle, valueAngle, true);
-    g.setColour(accentColour);
-    g.strokePath(arcVal, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+static void drawBrushedMetalTexture(juce::Graphics& g, juce::Rectangle<float> bounds, juce::Colour baseColour)
+{
+    // Base color
+    g.setColour(baseColour);
+    g.fillRoundedRectangle(bounds, 10.0f);
 
-    // Indicator dot
-    float indicatorAngle = startAngle + sliderPosProportional * (endAngle - startAngle);
-    float dotRadius = 4.0f;
-    float dotDistance = innerRadius * 0.65f;
-    float dotX = cx + dotDistance * std::cos(indicatorAngle);
-    float dotY = cy + dotDistance * std::sin(indicatorAngle);
-    g.setColour(accentColour);
-    g.fillEllipse(dotX - dotRadius, dotY - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f);
+    // Subtle diagonal brush strokes
+    g.setColour(juce::Colours::white.withAlpha(0.03f));
+    for (float i = -bounds.getHeight(); i < bounds.getWidth() + bounds.getHeight(); i += 3.0f)
+    {
+        g.drawLine(bounds.getX() + i, bounds.getY(),
+                   bounds.getX() + i + bounds.getHeight(), bounds.getBottom(), 0.5f);
+    }
+
+    // Top highlight
+    juce::ColourGradient topHighlight(baseColour.brighter(0.15f), bounds.getX(), bounds.getY(),
+                                       baseColour, bounds.getX(), bounds.getY() + 25.0f, false);
+    g.setGradientFill(topHighlight);
+    g.fillRoundedRectangle(bounds.getX(), bounds.getY(), bounds.getWidth(), 25.0f, 10.0f);
 }
 
 //==============================================================================
@@ -73,7 +79,7 @@ void LevelMeter::paint(juce::Graphics& g)
     auto bounds = getLocalBounds().toFloat();
 
     // Background
-    g.setColour(juce::Colour(0xff151520));
+    g.setColour(juce::Colour(0xff151515));
     g.fillRoundedRectangle(bounds, 3.0f);
 
     // Calculate level
@@ -106,7 +112,7 @@ void LevelMeter::paint(juce::Graphics& g)
     }
 
     // Outline
-    g.setColour(juce::Colour(0xff333344));
+    g.setColour(VoxColors::panelBorder);
     g.drawRoundedRectangle(getLocalBounds().toFloat(), 3.0f, 1.0f);
 }
 
@@ -149,7 +155,7 @@ void GainReductionMeter::paint(juce::Graphics& g)
     }
 
     // Border
-    g.setColour(juce::Colour(0xff333344));
+    g.setColour(VoxColors::panelBorder);
     g.drawRoundedRectangle(bounds, 4.0f, 1.0f);
 }
 
@@ -175,12 +181,12 @@ void EQVisualizer::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
 
-    // Background
-    g.setColour(juce::Colour(0xff0a0a15));
+    // Background (dark recessed area)
+    g.setColour(juce::Colour(0xff0a0a0a));
     g.fillRoundedRectangle(bounds, 6.0f);
 
     // Grid lines
-    g.setColour(juce::Colour(0xff1a1a2a));
+    g.setColour(juce::Colour(0xff1a1a1a));
 
     // Horizontal grid (dB)
     for (int db = -12; db <= 12; db += 6)
@@ -190,13 +196,13 @@ void EQVisualizer::paint(juce::Graphics& g)
     }
 
     // Zero line
-    g.setColour(juce::Colour(0xff2a2a4a));
+    g.setColour(juce::Colour(0xff2a2a2a));
     float zeroY = dbToY(0.0f, bounds.getHeight());
     g.drawHorizontalLine((int)(bounds.getY() + zeroY), bounds.getX() + 5, bounds.getRight() - 5);
 
     // Vertical grid (frequency)
     float freqs[] = { 100.0f, 1000.0f, 10000.0f };
-    g.setColour(juce::Colour(0xff1a1a2a));
+    g.setColour(juce::Colour(0xff1a1a1a));
     for (float freq : freqs)
     {
         float x = freqToX(freq, bounds.getWidth());
@@ -227,17 +233,17 @@ void EQVisualizer::paint(juce::Graphics& g)
         }
     }
 
-    // Fill under curve
+    // Fill under curve (muted teal to match panel)
     juce::Path fillPath = responsePath;
     fillPath.lineTo(bounds.getRight(), bounds.getY() + zeroY);
     fillPath.lineTo(bounds.getX(), bounds.getY() + zeroY);
     fillPath.closeSubPath();
 
-    g.setColour(VoxColors::accent.withAlpha(0.15f));
+    g.setColour(VoxColors::panelEQ.brighter(0.3f).withAlpha(0.2f));
     g.fillPath(fillPath);
 
     // Stroke curve
-    g.setColour(VoxColors::accent);
+    g.setColour(juce::Colours::white.withAlpha(0.8f));
     g.strokePath(responsePath, juce::PathStrokeType(2.0f));
 
     // Border
@@ -251,7 +257,7 @@ void EQVisualizer::paint(juce::Graphics& g)
 CompressorSection::CompressorSection()
 {
     lookAndFeel = std::make_unique<VoxProcLookAndFeel>();
-    lookAndFeel->setAccentColour(VoxColors::accentOrange);
+    lookAndFeel->setAccentColour(juce::Colours::white);
 
     setupSlider(thresholdSlider, thresholdLabel, "THRESH");
     setupSlider(ratioSlider, ratioLabel, "RATIO");
@@ -268,11 +274,11 @@ CompressorSection::CompressorSection()
     kneeSlider.setTextValueSuffix(" dB");
 
     autoReleaseButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    autoReleaseButton.setColour(juce::ToggleButton::tickColourId, VoxColors::accentOrange);
+    autoReleaseButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
     addAndMakeVisible(autoReleaseButton);
 
     bypassButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    bypassButton.setColour(juce::ToggleButton::tickColourId, VoxColors::accentOrange);
+    bypassButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
     addAndMakeVisible(bypassButton);
 
     addAndMakeVisible(grMeter);
@@ -291,7 +297,7 @@ CompressorSection::~CompressorSection()
 void CompressorSection::setupSlider(juce::Slider& slider, juce::Label& label, const juce::String& text)
 {
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 14);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 55, 14);
     slider.setColour(juce::Slider::textBoxTextColourId, VoxColors::textPrimary);
     slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     slider.setLookAndFeel(lookAndFeel.get());
@@ -299,39 +305,48 @@ void CompressorSection::setupSlider(juce::Slider& slider, juce::Label& label, co
 
     label.setText(text, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, VoxColors::textSecondary);
+    label.setColour(juce::Label::textColourId, VoxColors::textPrimary.withAlpha(0.85f));
     label.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
     addAndMakeVisible(label);
 }
 
 void CompressorSection::paint(juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().toFloat().reduced(2);
+    auto bounds = getLocalBounds().toFloat().reduced(4);
 
-    // Panel background
-    g.setColour(VoxColors::panelBg);
-    g.fillRoundedRectangle(bounds, 8.0f);
+    // Brushed metal panel
+    drawBrushedMetalTexture(g, bounds, VoxColors::panelComp);
 
-    // Border
-    g.setColour(VoxColors::panelBorder);
-    g.drawRoundedRectangle(bounds, 8.0f, 1.5f);
+    // Beveled edge effect
+    g.setColour(VoxColors::panelComp.brighter(0.2f));
+    g.drawRoundedRectangle(bounds, 10.0f, 2.0f);
+    g.setColour(VoxColors::panelComp.darker(0.3f));
+    g.drawRoundedRectangle(bounds.reduced(2), 8.0f, 1.0f);
+
+    // Corner screws
+    float screwSize = 8.0f;
+    float screwInset = 12.0f;
+    drawScrew(g, bounds.getX() + screwInset, bounds.getY() + screwInset, screwSize);
+    drawScrew(g, bounds.getRight() - screwInset, bounds.getY() + screwInset, screwSize);
+    drawScrew(g, bounds.getX() + screwInset, bounds.getBottom() - screwInset, screwSize);
+    drawScrew(g, bounds.getRight() - screwInset, bounds.getBottom() - screwInset, screwSize);
 
     // Title
-    g.setColour(VoxColors::accentOrange);
-    g.setFont(juce::FontOptions(14.0f).withStyle("Bold"));
-    g.drawText("COMPRESSOR", bounds.removeFromTop(30).reduced(10, 0), juce::Justification::centredLeft);
+    g.setColour(juce::Colours::white.withAlpha(0.9f));
+    g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
+    g.drawText("COMPRESSOR", bounds.removeFromTop(28).reduced(30, 0), juce::Justification::centredLeft);
 }
 
 void CompressorSection::resized()
 {
     auto bounds = getLocalBounds().reduced(10);
-    bounds.removeFromTop(30); // Title
+    bounds.removeFromTop(28); // Title
 
-    const int knobSize = 55;
+    const int knobSize = 50;
     const int labelHeight = 14;
-    const int spacing = 62;
+    const int spacing = 58;  // Fixed spacing to prevent overlap
 
-    int x = 10;
+    int x = 25;
     int y = bounds.getY();
 
     auto placeKnob = [&](juce::Slider& slider, juce::Label& label)
@@ -349,11 +364,11 @@ void CompressorSection::resized()
     placeKnob(kneeSlider, kneeLabel);
 
     // GR Meter
-    grMeter.setBounds(x + 10, y + 20, getWidth() - x - 80, 24);
+    grMeter.setBounds(x + 15, y + 18, getWidth() - x - 90, 22);
 
     // Buttons
-    autoReleaseButton.setBounds(x + 10, y + 50, 60, 20);
-    bypassButton.setBounds(getWidth() - 70, y + 50, 60, 20);
+    autoReleaseButton.setBounds(x + 15, y + 46, 55, 18);
+    bypassButton.setBounds(getWidth() - 75, y + 46, 55, 18);
 }
 
 //==============================================================================
@@ -362,7 +377,7 @@ void CompressorSection::resized()
 DeEsserSection::DeEsserSection()
 {
     lookAndFeel = std::make_unique<VoxProcLookAndFeel>();
-    lookAndFeel->setAccentColour(VoxColors::accentGreen);
+    lookAndFeel->setAccentColour(juce::Colours::white);
 
     setupSlider(frequencySlider, frequencyLabel, "FREQUENCY");
     setupSlider(thresholdSlider, thresholdLabel, "THRESHOLD");
@@ -374,23 +389,24 @@ DeEsserSection::DeEsserSection()
 
     modeLabel.setText("MODE", juce::dontSendNotification);
     modeLabel.setJustificationType(juce::Justification::centred);
-    modeLabel.setColour(juce::Label::textColourId, VoxColors::textSecondary);
+    modeLabel.setColour(juce::Label::textColourId, VoxColors::textPrimary.withAlpha(0.85f));
     modeLabel.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
     addAndMakeVisible(modeLabel);
 
     modeSelector.addItem("Split-Band", 1);
     modeSelector.addItem("Wideband", 2);
-    modeSelector.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff1a1a2a));
-    modeSelector.setColour(juce::ComboBox::textColourId, VoxColors::accentGreen);
+    modeSelector.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff0a0a0a));
+    modeSelector.setColour(juce::ComboBox::textColourId, VoxColors::lcdGreen);
     modeSelector.setColour(juce::ComboBox::outlineColourId, VoxColors::panelBorder);
+    modeSelector.setColour(juce::ComboBox::arrowColourId, VoxColors::lcdGreen);
     addAndMakeVisible(modeSelector);
 
     listenButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    listenButton.setColour(juce::ToggleButton::tickColourId, VoxColors::accentGreen);
+    listenButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
     addAndMakeVisible(listenButton);
 
     bypassButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    bypassButton.setColour(juce::ToggleButton::tickColourId, VoxColors::accentGreen);
+    bypassButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
     addAndMakeVisible(bypassButton);
 
     addAndMakeVisible(grMeter);
@@ -414,58 +430,69 @@ void DeEsserSection::setupSlider(juce::Slider& slider, juce::Label& label, const
 
     label.setText(text, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, VoxColors::textSecondary);
+    label.setColour(juce::Label::textColourId, VoxColors::textPrimary.withAlpha(0.85f));
     label.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
     addAndMakeVisible(label);
 }
 
 void DeEsserSection::paint(juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().toFloat().reduced(2);
+    auto bounds = getLocalBounds().toFloat().reduced(4);
 
-    g.setColour(VoxColors::panelBg);
-    g.fillRoundedRectangle(bounds, 8.0f);
+    // Brushed metal panel (dark teal)
+    drawBrushedMetalTexture(g, bounds, VoxColors::panelDeEss);
 
-    g.setColour(VoxColors::panelBorder);
-    g.drawRoundedRectangle(bounds, 8.0f, 1.5f);
+    // Beveled edge effect
+    g.setColour(VoxColors::panelDeEss.brighter(0.2f));
+    g.drawRoundedRectangle(bounds, 10.0f, 2.0f);
+    g.setColour(VoxColors::panelDeEss.darker(0.3f));
+    g.drawRoundedRectangle(bounds.reduced(2), 8.0f, 1.0f);
 
-    // Title with activity indicator
-    auto titleArea = bounds.removeFromTop(30).reduced(10, 0);
-    g.setColour(VoxColors::accentGreen);
-    g.setFont(juce::FontOptions(14.0f).withStyle("Bold"));
+    // Corner screws
+    float screwSize = 8.0f;
+    float screwInset = 12.0f;
+    drawScrew(g, bounds.getX() + screwInset, bounds.getY() + screwInset, screwSize);
+    drawScrew(g, bounds.getRight() - screwInset, bounds.getY() + screwInset, screwSize);
+    drawScrew(g, bounds.getX() + screwInset, bounds.getBottom() - screwInset, screwSize);
+    drawScrew(g, bounds.getRight() - screwInset, bounds.getBottom() - screwInset, screwSize);
+
+    // Title with activity LED
+    auto titleArea = bounds.removeFromTop(28).reduced(30, 0);
+    g.setColour(juce::Colours::white.withAlpha(0.9f));
+    g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
     g.drawText("DE-ESSER", titleArea, juce::Justification::centredLeft);
 
     // Activity LED
-    float ledX = titleArea.getRight() - 12;
-    float ledY = titleArea.getCentreY() - 5;
+    float ledX = titleArea.getRight() - 15;
+    float ledY = titleArea.getCentreY() - 4;
     if (isActive)
     {
-        g.setColour(VoxColors::accentGreen.withAlpha(0.4f));
-        g.fillEllipse(ledX - 3, ledY - 3, 16, 16);
-        g.setColour(VoxColors::accentGreen);
+        g.setColour(VoxColors::led.withAlpha(0.4f));
+        g.fillEllipse(ledX - 3, ledY - 3, 14, 14);
+        g.setColour(VoxColors::led);
     }
     else
     {
-        g.setColour(VoxColors::accentGreen.withAlpha(0.2f));
+        g.setColour(VoxColors::led.withAlpha(0.2f));
     }
-    g.fillEllipse(ledX, ledY, 10, 10);
+    g.fillEllipse(ledX, ledY, 8, 8);
 }
 
 void DeEsserSection::resized()
 {
     auto bounds = getLocalBounds().reduced(10);
-    bounds.removeFromTop(30);
+    bounds.removeFromTop(28);
 
-    const int knobSize = 55;
+    const int knobSize = 50;
     const int labelHeight = 14;
-    const int spacing = 62;
+    const int spacing = 68;  // Fixed spacing to prevent overlap
 
-    int x = 10;
+    int x = 25;
     int y = bounds.getY();
 
     auto placeKnob = [&](juce::Slider& slider, juce::Label& label)
     {
-        label.setBounds(x, y, knobSize, labelHeight);
+        label.setBounds(x, y, knobSize + 10, labelHeight);
         slider.setBounds(x, y + labelHeight, knobSize, knobSize);
         x += spacing;
     };
@@ -476,14 +503,14 @@ void DeEsserSection::resized()
 
     // Mode selector
     modeLabel.setBounds(x, y, 80, labelHeight);
-    modeSelector.setBounds(x, y + labelHeight + 5, 85, 24);
+    modeSelector.setBounds(x, y + labelHeight + 5, 85, 22);
 
     // GR Meter
-    grMeter.setBounds(x + 100, y + 10, getWidth() - x - 180, 24);
+    grMeter.setBounds(x + 100, y + 10, getWidth() - x - 180, 22);
 
     // Buttons
-    listenButton.setBounds(x + 100, y + 45, 60, 20);
-    bypassButton.setBounds(getWidth() - 70, y + 45, 60, 20);
+    listenButton.setBounds(x + 100, y + 42, 55, 18);
+    bypassButton.setBounds(getWidth() - 75, y + 42, 55, 18);
 }
 
 //==============================================================================
@@ -493,7 +520,7 @@ EQSection::EQSection(VoxProcAudioProcessor& p)
     : eqVisualizer(p)
 {
     lookAndFeel = std::make_unique<VoxProcLookAndFeel>();
-    lookAndFeel->setAccentColour(VoxColors::accent);
+    lookAndFeel->setAccentColour(juce::Colours::white);
 
     // HPF
     setupSlider(hpfFreqSlider, hpfFreqLabel, "HPF");
@@ -501,9 +528,10 @@ EQSection::EQSection(VoxProcAudioProcessor& p)
 
     hpfSlopeSelector.addItem("12 dB/oct", 1);
     hpfSlopeSelector.addItem("24 dB/oct", 2);
-    hpfSlopeSelector.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff1a1a2a));
-    hpfSlopeSelector.setColour(juce::ComboBox::textColourId, VoxColors::accent);
+    hpfSlopeSelector.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff0a0a0a));
+    hpfSlopeSelector.setColour(juce::ComboBox::textColourId, VoxColors::lcdGreen);
     hpfSlopeSelector.setColour(juce::ComboBox::outlineColourId, VoxColors::panelBorder);
+    hpfSlopeSelector.setColour(juce::ComboBox::arrowColourId, VoxColors::lcdGreen);
     addAndMakeVisible(hpfSlopeSelector);
 
     // Low Shelf
@@ -540,7 +568,7 @@ EQSection::EQSection(VoxProcAudioProcessor& p)
     highShelfGainSlider.setTextValueSuffix(" dB");
 
     bypassButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    bypassButton.setColour(juce::ToggleButton::tickColourId, VoxColors::accent);
+    bypassButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
     addAndMakeVisible(bypassButton);
 
     addAndMakeVisible(eqVisualizer);
@@ -567,7 +595,7 @@ EQSection::~EQSection()
 void EQSection::setupSlider(juce::Slider& slider, juce::Label& label, const juce::String& text)
 {
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 12);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 11);
     slider.setColour(juce::Slider::textBoxTextColourId, VoxColors::textPrimary);
     slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     slider.setLookAndFeel(lookAndFeel.get());
@@ -583,7 +611,7 @@ void EQSection::setupSlider(juce::Slider& slider, juce::Label& label, const juce
 void EQSection::setupGainSlider(juce::Slider& slider, juce::Label& label, const juce::String& text)
 {
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 12);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 11);
     slider.setColour(juce::Slider::textBoxTextColourId, VoxColors::textPrimary);
     slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     slider.setLookAndFeel(lookAndFeel.get());
@@ -591,91 +619,103 @@ void EQSection::setupGainSlider(juce::Slider& slider, juce::Label& label, const 
 
     label.setText(text, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, VoxColors::accent);
+    label.setColour(juce::Label::textColourId, VoxColors::textPrimary.withAlpha(0.9f));
     label.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
     addAndMakeVisible(label);
 }
 
 void EQSection::paint(juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().toFloat().reduced(2);
+    auto bounds = getLocalBounds().toFloat().reduced(4);
 
-    g.setColour(VoxColors::panelBg);
-    g.fillRoundedRectangle(bounds, 8.0f);
+    // Brushed metal panel (muted gray)
+    drawBrushedMetalTexture(g, bounds, VoxColors::panelEQ);
 
-    g.setColour(VoxColors::panelBorder);
-    g.drawRoundedRectangle(bounds, 8.0f, 1.5f);
+    // Beveled edge effect
+    g.setColour(VoxColors::panelEQ.brighter(0.2f));
+    g.drawRoundedRectangle(bounds, 10.0f, 2.0f);
+    g.setColour(VoxColors::panelEQ.darker(0.3f));
+    g.drawRoundedRectangle(bounds.reduced(2), 8.0f, 1.0f);
 
-    g.setColour(VoxColors::accent);
-    g.setFont(juce::FontOptions(14.0f).withStyle("Bold"));
-    g.drawText("EQUALIZER", bounds.removeFromTop(30).reduced(10, 0), juce::Justification::centredLeft);
+    // Corner screws
+    float screwSize = 8.0f;
+    float screwInset = 12.0f;
+    drawScrew(g, bounds.getX() + screwInset, bounds.getY() + screwInset, screwSize);
+    drawScrew(g, bounds.getRight() - screwInset, bounds.getY() + screwInset, screwSize);
+    drawScrew(g, bounds.getX() + screwInset, bounds.getBottom() - screwInset, screwSize);
+    drawScrew(g, bounds.getRight() - screwInset, bounds.getBottom() - screwInset, screwSize);
+
+    // Title
+    g.setColour(juce::Colours::white.withAlpha(0.9f));
+    g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
+    g.drawText("EQUALIZER", bounds.removeFromTop(28).reduced(30, 0), juce::Justification::centredLeft);
 }
 
 void EQSection::resized()
 {
     auto bounds = getLocalBounds().reduced(10);
-    bounds.removeFromTop(30);
+    bounds.removeFromTop(28);
 
     // EQ Visualizer at top
-    eqVisualizer.setBounds(bounds.removeFromTop(100).reduced(0, 5));
+    eqVisualizer.setBounds(bounds.removeFromTop(90).reduced(20, 5));
 
-    bounds.removeFromTop(10);
+    bounds.removeFromTop(8);
 
-    const int knobSize = 45;
-    const int smallKnobSize = 38;
+    const int knobSize = 40;
+    const int smallKnobSize = 34;
     const int labelHeight = 12;
-    const int bandWidth = 95;
+    const int bandWidth = 88;  // Fixed width per band to prevent overlap
 
-    int x = 5;
+    int x = 15;
     int y = bounds.getY();
 
     // HPF
-    hpfFreqLabel.setBounds(x, y, knobSize + 10, labelHeight);
-    hpfFreqSlider.setBounds(x, y + labelHeight, knobSize + 10, knobSize);
-    hpfSlopeSelector.setBounds(x, y + labelHeight + knobSize + 2, 55, 18);
-    x += bandWidth - 15;
+    hpfFreqLabel.setBounds(x, y, knobSize + 8, labelHeight);
+    hpfFreqSlider.setBounds(x, y + labelHeight, knobSize + 8, knobSize);
+    hpfSlopeSelector.setBounds(x, y + labelHeight + knobSize + 2, 52, 16);
+    x += bandWidth - 10;
 
     // Low Shelf
     lowShelfGainLabel.setBounds(x, y, knobSize, labelHeight);
     lowShelfGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    lowShelfFreqLabel.setBounds(x + knobSize - 5, y + 20, smallKnobSize, 10);
-    lowShelfFreqSlider.setBounds(x + knobSize - 5, y + 28, smallKnobSize, smallKnobSize);
+    lowShelfFreqLabel.setBounds(x + knobSize - 2, y + 18, smallKnobSize, 10);
+    lowShelfFreqSlider.setBounds(x + knobSize - 2, y + 26, smallKnobSize, smallKnobSize);
     x += bandWidth;
 
     // Low-Mid
     lowMidGainLabel.setBounds(x, y, knobSize, labelHeight);
     lowMidGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    lowMidFreqLabel.setBounds(x + knobSize - 5, y + 8, smallKnobSize, 10);
-    lowMidFreqSlider.setBounds(x + knobSize - 5, y + 16, smallKnobSize, smallKnobSize);
-    lowMidQLabel.setBounds(x + knobSize - 5, y + 50, smallKnobSize, 10);
-    lowMidQSlider.setBounds(x + knobSize - 5, y + 58, smallKnobSize, smallKnobSize);
+    lowMidFreqLabel.setBounds(x + knobSize - 2, y + 6, smallKnobSize, 10);
+    lowMidFreqSlider.setBounds(x + knobSize - 2, y + 14, smallKnobSize, smallKnobSize);
+    lowMidQLabel.setBounds(x + knobSize - 2, y + 46, smallKnobSize, 10);
+    lowMidQSlider.setBounds(x + knobSize - 2, y + 54, smallKnobSize, smallKnobSize);
     x += bandWidth;
 
     // Mid
     midGainLabel.setBounds(x, y, knobSize, labelHeight);
     midGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    midFreqLabel.setBounds(x + knobSize - 5, y + 8, smallKnobSize, 10);
-    midFreqSlider.setBounds(x + knobSize - 5, y + 16, smallKnobSize, smallKnobSize);
-    midQLabel.setBounds(x + knobSize - 5, y + 50, smallKnobSize, 10);
-    midQSlider.setBounds(x + knobSize - 5, y + 58, smallKnobSize, smallKnobSize);
+    midFreqLabel.setBounds(x + knobSize - 2, y + 6, smallKnobSize, 10);
+    midFreqSlider.setBounds(x + knobSize - 2, y + 14, smallKnobSize, smallKnobSize);
+    midQLabel.setBounds(x + knobSize - 2, y + 46, smallKnobSize, 10);
+    midQSlider.setBounds(x + knobSize - 2, y + 54, smallKnobSize, smallKnobSize);
     x += bandWidth;
 
     // High-Mid
     highMidGainLabel.setBounds(x, y, knobSize, labelHeight);
     highMidGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    highMidFreqLabel.setBounds(x + knobSize - 5, y + 8, smallKnobSize, 10);
-    highMidFreqSlider.setBounds(x + knobSize - 5, y + 16, smallKnobSize, smallKnobSize);
-    highMidQLabel.setBounds(x + knobSize - 5, y + 50, smallKnobSize, 10);
-    highMidQSlider.setBounds(x + knobSize - 5, y + 58, smallKnobSize, smallKnobSize);
+    highMidFreqLabel.setBounds(x + knobSize - 2, y + 6, smallKnobSize, 10);
+    highMidFreqSlider.setBounds(x + knobSize - 2, y + 14, smallKnobSize, smallKnobSize);
+    highMidQLabel.setBounds(x + knobSize - 2, y + 46, smallKnobSize, 10);
+    highMidQSlider.setBounds(x + knobSize - 2, y + 54, smallKnobSize, smallKnobSize);
     x += bandWidth;
 
     // High Shelf
     highShelfGainLabel.setBounds(x, y, knobSize, labelHeight);
     highShelfGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    highShelfFreqLabel.setBounds(x + knobSize - 5, y + 20, smallKnobSize, 10);
-    highShelfFreqSlider.setBounds(x + knobSize - 5, y + 28, smallKnobSize, smallKnobSize);
+    highShelfFreqLabel.setBounds(x + knobSize - 2, y + 18, smallKnobSize, 10);
+    highShelfFreqSlider.setBounds(x + knobSize - 2, y + 26, smallKnobSize, smallKnobSize);
 
-    bypassButton.setBounds(getWidth() - 70, y + 80, 60, 20);
+    bypassButton.setBounds(getWidth() - 75, y + 75, 55, 18);
 }
 
 //==============================================================================
@@ -685,11 +725,11 @@ VoxProcAudioProcessorEditor::VoxProcAudioProcessorEditor(VoxProcAudioProcessor& 
     : AudioProcessorEditor(&p), audioProcessor(p), eqSection(p)
 {
     globalLookAndFeel = std::make_unique<VoxProcLookAndFeel>();
-    globalLookAndFeel->setAccentColour(VoxColors::textPrimary);
+    globalLookAndFeel->setAccentColour(juce::Colours::white);
 
     // Input/Output gain sliders
     inputGainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    inputGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 14);
+    inputGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 14);
     inputGainSlider.setColour(juce::Slider::textBoxTextColourId, VoxColors::textPrimary);
     inputGainSlider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     inputGainSlider.setTextValueSuffix(" dB");
@@ -703,7 +743,7 @@ VoxProcAudioProcessorEditor::VoxProcAudioProcessorEditor(VoxProcAudioProcessor& 
     addAndMakeVisible(inputGainLabel);
 
     outputGainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    outputGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 14);
+    outputGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 14);
     outputGainSlider.setColour(juce::Slider::textBoxTextColourId, VoxColors::textPrimary);
     outputGainSlider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     outputGainSlider.setTextValueSuffix(" dB");
@@ -805,60 +845,65 @@ void VoxProcAudioProcessorEditor::timerCallback()
 
 void VoxProcAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    // Background
+    // Dark background (matching PDLBRD)
     g.fillAll(VoxColors::background);
 
-    // Header
-    juce::ColourGradient headerGradient(juce::Colour(0xff252545), 0.0f, 0.0f,
+    // Header bar with subtle gradient
+    juce::ColourGradient headerGradient(juce::Colour(0xff252525), 0.0f, 0.0f,
                                          VoxColors::background, 0.0f, 50.0f, false);
     g.setGradientFill(headerGradient);
     g.fillRect(0, 0, getWidth(), 50);
 
-    // Header line
-    g.setColour(VoxColors::panelBorder);
+    // Header bottom edge (metal strip)
+    g.setColour(juce::Colour(0xff333333));
     g.fillRect(0, 48, getWidth(), 2);
+    g.setColour(juce::Colour(0xff404040));
+    g.drawLine(0, 48, (float)getWidth(), 48, 1.0f);
 
-    // Title
-    g.setColour(VoxColors::accent);
-    g.setFont(juce::FontOptions(24.0f).withStyle("Bold"));
+    // Title with slight emboss effect
+    g.setColour(juce::Colour(0xff111111));
+    g.setFont(juce::FontOptions(22.0f).withStyle("Bold"));
+    g.drawText("VOXPROC", 16, 11, 200, 30, juce::Justification::centredLeft);
+    g.setColour(juce::Colours::white);
     g.drawText("VOXPROC", 15, 10, 200, 30, juce::Justification::centredLeft);
 
+    // Subtitle
     g.setColour(VoxColors::textSecondary);
-    g.setFont(juce::FontOptions(10.0f));
-    g.drawText("Vocal Processing Plugin", 15, 32, 200, 15, juce::Justification::centredLeft);
+    g.setFont(juce::FontOptions(9.0f));
+    g.drawText("Vocal Processing", 15, 32, 150, 14, juce::Justification::centredLeft);
 }
 
 void VoxProcAudioProcessorEditor::resized()
 {
     const int headerHeight = 50;
-    const int margin = 10;
-    const int meterWidth = 16;
-    const int gainKnobSize = 50;
+    const int margin = 8;
+    const int meterWidth = 14;
+    const int gainKnobSize = 45;
 
     auto bounds = getLocalBounds();
     bounds.removeFromTop(headerHeight);
 
     // Left side: Input meter and gain
-    auto leftArea = bounds.removeFromLeft(70);
-    inputGainLabel.setBounds(leftArea.getX() + 10, leftArea.getY() + 5, 50, 14);
+    auto leftArea = bounds.removeFromLeft(65);
+    inputGainLabel.setBounds(leftArea.getX() + 10, leftArea.getY() + 5, 45, 14);
     inputGainSlider.setBounds(leftArea.getX() + 10, leftArea.getY() + 17, gainKnobSize, gainKnobSize);
-    inputMeter.setBounds(leftArea.getX() + 10, leftArea.getY() + 75, meterWidth, leftArea.getHeight() - 85);
+    inputMeter.setBounds(leftArea.getX() + 12, leftArea.getY() + 70, meterWidth, leftArea.getHeight() - 80);
 
     // Right side: Output meter and gain
-    auto rightArea = bounds.removeFromRight(70);
-    outputGainLabel.setBounds(rightArea.getX() + 10, rightArea.getY() + 5, 50, 14);
+    auto rightArea = bounds.removeFromRight(65);
+    outputGainLabel.setBounds(rightArea.getX() + 10, rightArea.getY() + 5, 45, 14);
     outputGainSlider.setBounds(rightArea.getX() + 10, rightArea.getY() + 17, gainKnobSize, gainKnobSize);
-    outputMeter.setBounds(rightArea.getX() + 10, rightArea.getY() + 75, meterWidth, rightArea.getHeight() - 85);
+    outputMeter.setBounds(rightArea.getX() + 12, rightArea.getY() + 70, meterWidth, rightArea.getHeight() - 80);
 
     // Main content area
     bounds.reduce(margin, margin);
 
     // Compressor section
-    compressorSection.setBounds(bounds.removeFromTop(110));
+    compressorSection.setBounds(bounds.removeFromTop(105));
     bounds.removeFromTop(margin);
 
     // De-esser section
-    deEsserSection.setBounds(bounds.removeFromTop(110));
+    deEsserSection.setBounds(bounds.removeFromTop(105));
     bounds.removeFromTop(margin);
 
     // EQ section (takes remaining space)

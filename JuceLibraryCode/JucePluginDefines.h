@@ -47,7 +47,7 @@
  #define JucePlugin_Desc                   "Vocal processing plugin with compression, de-essing, and EQ"
 #endif
 #ifndef  JucePlugin_Manufacturer
- #define JucePlugin_Manufacturer           "VoxProc"
+ #define JucePlugin_Manufacturer           "Fletcher"
 #endif
 #ifndef  JucePlugin_ManufacturerWebsite
  #define JucePlugin_ManufacturerWebsite    "https://github.com/ianfletcher314/voxproc"
@@ -137,7 +137,7 @@
  #define JucePlugin_IAASubType             JucePlugin_PluginCode
 #endif
 #ifndef  JucePlugin_IAAName
- #define JucePlugin_IAAName                "VoxProc: VoxProc"
+ #define JucePlugin_IAAName                "Fletcher: VoxProc"
 #endif
 #ifndef  JucePlugin_VSTNumMidiInputs
  #define JucePlugin_VSTNumMidiInputs       16
