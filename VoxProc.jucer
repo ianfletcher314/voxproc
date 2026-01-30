@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="VOXPRC1" name="VoxProc" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1"
-              companyName="VoxProc" companyCopyright="2024"
-              companyWebsite="https://github.com/ianfletcher314/voxproc"
-              pluginFormats="buildAU,buildVST3"
-              pluginCharacteristicsValue=""
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="VoxProc"
+              companyCopyright="2024" companyWebsite="https://github.com/ianfletcher314/voxproc"
+              pluginFormats="buildAU,buildVST3" pluginCharacteristicsValue=""
               pluginName="VoxProc" pluginDesc="Vocal processing plugin with compression, de-essing, and EQ"
-              pluginManufacturer="VoxProc" pluginManufacturerCode="VoxP"
-              pluginCode="Vxpc" pluginVST3Category="Fx"
-              pluginAUMainType="'aufx'">
+              pluginManufacturer="VoxProc" pluginManufacturerCode="VoxP" pluginCode="Vxpc"
+              pluginVST3Category="Fx" pluginAUMainType="'aufx'">
   <MAINGROUP id="MAINGRP" name="VoxProc">
     <GROUP id="SOURCE" name="Source">
       <FILE id="PROCSR" name="PluginProcessor.cpp" compile="1" resource="0"
@@ -18,23 +15,15 @@
             file="Source/PluginProcessor.h"/>
       <FILE id="EDITOR" name="PluginEditor.cpp" compile="1" resource="0"
             file="Source/PluginEditor.cpp"/>
-      <FILE id="EDITORH" name="PluginEditor.h" compile="0" resource="0"
-            file="Source/PluginEditor.h"/>
+      <FILE id="EDITORH" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
       <GROUP id="DSP" name="DSP">
-        <FILE id="DSPUTILS" name="DSPUtils.h" compile="0" resource="0"
-              file="Source/DSP/DSPUtils.h"/>
-        <FILE id="COMPCPP" name="Compressor.cpp" compile="1" resource="0"
-              file="Source/DSP/Compressor.cpp"/>
-        <FILE id="COMPH" name="Compressor.h" compile="0" resource="0"
-              file="Source/DSP/Compressor.h"/>
-        <FILE id="DEESSCPP" name="DeEsser.cpp" compile="1" resource="0"
-              file="Source/DSP/DeEsser.cpp"/>
-        <FILE id="DEESSH" name="DeEsser.h" compile="0" resource="0"
-              file="Source/DSP/DeEsser.h"/>
-        <FILE id="EQCPP" name="Equalizer.cpp" compile="1" resource="0"
-              file="Source/DSP/Equalizer.cpp"/>
-        <FILE id="EQH" name="Equalizer.h" compile="0" resource="0"
-              file="Source/DSP/Equalizer.h"/>
+        <FILE id="DSPUTILS" name="DSPUtils.h" compile="0" resource="0" file="Source/DSP/DSPUtils.h"/>
+        <FILE id="COMPCPP" name="Compressor.cpp" compile="1" resource="0" file="Source/DSP/Compressor.cpp"/>
+        <FILE id="COMPH" name="Compressor.h" compile="0" resource="0" file="Source/DSP/Compressor.h"/>
+        <FILE id="DEESSCPP" name="DeEsser.cpp" compile="1" resource="0" file="Source/DSP/DeEsser.cpp"/>
+        <FILE id="DEESSH" name="DeEsser.h" compile="0" resource="0" file="Source/DSP/DeEsser.h"/>
+        <FILE id="EQCPP" name="Equalizer.cpp" compile="1" resource="0" file="Source/DSP/Equalizer.cpp"/>
+        <FILE id="EQH" name="Equalizer.h" compile="0" resource="0" file="Source/DSP/Equalizer.h"/>
       </GROUP>
     </GROUP>
   </MAINGROUP>
@@ -59,6 +48,7 @@
         <MODULEPATH id="juce_graphics" path="/Users/ianfletcher/JUCE/modules"/>
         <MODULEPATH id="juce_gui_basics" path="/Users/ianfletcher/JUCE/modules"/>
         <MODULEPATH id="juce_gui_extra" path="/Users/ianfletcher/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="../JUCE/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
   </EXPORTFORMATS>
@@ -66,8 +56,11 @@
     <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="1"/>
     <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="1"/>
     <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
