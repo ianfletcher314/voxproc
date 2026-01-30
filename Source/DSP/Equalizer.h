@@ -56,6 +56,7 @@ public:
 
     // Get frequency response for visualization (returns magnitude at given frequency)
     float getMagnitudeAtFrequency(float freq) const;
+    float getBandMagnitudeAtFrequency(float freq, int bandIndex) const;
 
 private:
     void updateAllFilters();

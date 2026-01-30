@@ -99,7 +99,7 @@ private:
 };
 
 //==============================================================================
-// EQ Visualizer Component
+// EQ Visualizer Component - Synth-style with color-coded bands
 //==============================================================================
 class EQVisualizer : public juce::Component
 {
@@ -107,10 +107,22 @@ public:
     EQVisualizer(VoxProcAudioProcessor& p) : processor(p) {}
     void paint(juce::Graphics& g) override;
 
+    // Band colors matching synth page style
+    static constexpr uint32_t colorHPF       = 0xffff5555;  // Red
+    static constexpr uint32_t colorLowShelf  = 0xffffaa00;  // Orange
+    static constexpr uint32_t colorLowMid    = 0xff00ff88;  // Green
+    static constexpr uint32_t colorMid       = 0xff00aaff;  // Cyan
+    static constexpr uint32_t colorHighMid   = 0xffff55ff;  // Magenta
+    static constexpr uint32_t colorHighShelf = 0xffffffff;  // White
+    static constexpr uint32_t colorCombined  = 0xffffffff;  // White with glow
+
 private:
     VoxProcAudioProcessor& processor;
     float freqToX(float freq, float width) const;
     float dbToY(float db, float height) const;
+
+    // Calculate magnitude for a single band at a given frequency
+    float getBandMagnitudeAtFrequency(float freq, int bandIndex) const;
 };
 
 //==============================================================================

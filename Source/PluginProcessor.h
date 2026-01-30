@@ -49,6 +49,7 @@ public:
 
     // EQ visualization
     float getEQMagnitudeAtFrequency(float freq) const { return equalizer.getMagnitudeAtFrequency(freq); }
+    float getEQBandMagnitudeAtFrequency(float freq, int bandIndex) const { return equalizer.getBandMagnitudeAtFrequency(freq, bandIndex); }
 
     // DSP access for visualization
     const Equalizer& getEqualizer() const { return equalizer; }

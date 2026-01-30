@@ -232,6 +232,60 @@ float Equalizer::getMagnitudeAtFrequency(float freq) const
     return magnitude;
 }
 
+float Equalizer::getBandMagnitudeAtFrequency(float freq, int bandIndex) const
+{
+    // Calculate magnitude for a single EQ band
+    float w = 2.0f * juce::MathConstants<float>::pi * freq / static_cast<float>(currentSampleRate);
+    float cosw = std::cos(w);
+    float cos2w = std::cos(2.0f * w);
+    float sinw = std::sin(w);
+    float sin2w = std::sin(2.0f * w);
+
+    auto calcMagnitude = [&](const DSPUtils::BiquadCoeffs& c) -> float
+    {
+        float numReal = c.b0 + c.b1 * cosw + c.b2 * cos2w;
+        float numImag = -c.b1 * sinw - c.b2 * sin2w;
+        float denReal = 1.0f + c.a1 * cosw + c.a2 * cos2w;
+        float denImag = -c.a1 * sinw - c.a2 * sin2w;
+
+        float numMag = std::sqrt(numReal * numReal + numImag * numImag);
+        float denMag = std::sqrt(denReal * denReal + denImag * denImag);
+
+        return numMag / denMag;
+    };
+
+    switch (bandIndex)
+    {
+        case HPF:
+            if (hpfFreq > 20.0f)
+            {
+                float mag = calcMagnitude(hpfCoeffs1);
+                if (hpfSlope >= 24)
+                    mag *= calcMagnitude(hpfCoeffs2);
+                return mag;
+            }
+            return 1.0f;
+
+        case LowShelf:
+            return calcMagnitude(lowShelfCoeffs);
+
+        case LowMid:
+            return calcMagnitude(lowMidCoeffs);
+
+        case Mid:
+            return calcMagnitude(midCoeffs);
+
+        case HighMid:
+            return calcMagnitude(highMidCoeffs);
+
+        case HighShelf:
+            return calcMagnitude(highShelfCoeffs);
+
+        default:
+            return 1.0f;
+    }
+}
+
 void Equalizer::process(juce::AudioBuffer<float>& buffer)
 {
     if (bypassed)

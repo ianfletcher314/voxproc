@@ -241,14 +241,14 @@ void GainReductionMeter::paint(juce::Graphics& g)
 }
 
 //==============================================================================
-// EQVisualizer
+// EQVisualizer - Synth-style with color-coded bands
 //==============================================================================
 float EQVisualizer::freqToX(float freq, float width) const
 {
     // Log scale: 20Hz to 20kHz
     float minLog = std::log10(20.0f);
     float maxLog = std::log10(20000.0f);
-    float freqLog = std::log10(freq);
+    float freqLog = std::log10(juce::jmax(20.0f, freq));
     return width * (freqLog - minLog) / (maxLog - minLog);
 }
 
@@ -258,39 +258,101 @@ float EQVisualizer::dbToY(float db, float height) const
     return height * 0.5f * (1.0f - db / 18.0f);
 }
 
+float EQVisualizer::getBandMagnitudeAtFrequency(float freq, int bandIndex) const
+{
+    return processor.getEQBandMagnitudeAtFrequency(freq, bandIndex);
+}
+
 void EQVisualizer::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
 
-    // Background (dark recessed area)
-    g.setColour(juce::Colour(0xff0a0a0a));
+    // Background - Synth style dark (#0a0908)
+    g.setColour(juce::Colour(0xff0a0908));
     g.fillRoundedRectangle(bounds, 6.0f);
 
-    // Grid lines
-    g.setColour(juce::Colour(0xff1a1a1a));
+    // Grid lines - Synth style (#2a2520)
+    g.setColour(juce::Colour(0xff2a2520));
 
     // Horizontal grid (dB)
     for (int db = -12; db <= 12; db += 6)
     {
+        if (db == 0) continue;  // Zero line drawn separately
         float y = dbToY((float)db, bounds.getHeight());
         g.drawHorizontalLine((int)(bounds.getY() + y), bounds.getX() + 5, bounds.getRight() - 5);
     }
 
-    // Zero line
-    g.setColour(juce::Colour(0xff2a2a2a));
+    // Zero line (brighter)
+    g.setColour(juce::Colour(0xff3d3428));
     float zeroY = dbToY(0.0f, bounds.getHeight());
     g.drawHorizontalLine((int)(bounds.getY() + zeroY), bounds.getX() + 5, bounds.getRight() - 5);
 
-    // Vertical grid (frequency)
-    float freqs[] = { 100.0f, 1000.0f, 10000.0f };
-    g.setColour(juce::Colour(0xff1a1a1a));
+    // Vertical grid (frequency) - more frequency markers
+    float freqs[] = { 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f };
+    g.setColour(juce::Colour(0xff2a2520));
     for (float freq : freqs)
     {
         float x = freqToX(freq, bounds.getWidth());
         g.drawVerticalLine((int)(bounds.getX() + x), bounds.getY() + 5, bounds.getBottom() - 5);
     }
 
-    // Draw frequency response curve
+    // Draw frequency labels
+    g.setColour(juce::Colour(0xff5d4a35));
+    g.setFont(juce::FontOptions(8.0f));
+    const char* freqLabels[] = { "50", "100", "200", "500", "1k", "2k", "5k", "10k" };
+    for (int i = 0; i < 8; ++i)
+    {
+        float x = freqToX(freqs[i], bounds.getWidth());
+        g.drawText(freqLabels[i], (int)(bounds.getX() + x - 12), (int)(bounds.getBottom() - 12), 24, 10, juce::Justification::centred);
+    }
+
+    // Draw dB labels
+    g.drawText("+12", (int)(bounds.getX() + 2), (int)(bounds.getY() + dbToY(12.0f, bounds.getHeight()) - 5), 20, 10, juce::Justification::left);
+    g.drawText("0", (int)(bounds.getX() + 2), (int)(bounds.getY() + zeroY - 5), 20, 10, juce::Justification::left);
+    g.drawText("-12", (int)(bounds.getX() + 2), (int)(bounds.getY() + dbToY(-12.0f, bounds.getHeight()) - 5), 20, 10, juce::Justification::left);
+
+    // Band colors
+    const juce::Colour bandColors[] = {
+        juce::Colour(colorHPF),       // HPF - Red
+        juce::Colour(colorLowShelf),  // Low shelf - Orange
+        juce::Colour(colorLowMid),    // Low-mid - Green
+        juce::Colour(colorMid),       // Mid - Cyan
+        juce::Colour(colorHighMid),   // High-mid - Magenta
+        juce::Colour(colorHighShelf)  // High shelf - White
+    };
+
+    // Draw individual band curves
+    for (int band = 0; band < 6; ++band)
+    {
+        juce::Path bandPath;
+        bool pathStarted = false;
+
+        for (float x = 0; x < bounds.getWidth(); x += 2.0f)
+        {
+            float freq = 20.0f * std::pow(1000.0f, x / bounds.getWidth());
+            float magnitude = getBandMagnitudeAtFrequency(freq, band);
+            float db = juce::Decibels::gainToDecibels(magnitude, -24.0f);
+            db = juce::jlimit(-18.0f, 18.0f, db);
+
+            float y = dbToY(db, bounds.getHeight());
+
+            if (!pathStarted)
+            {
+                bandPath.startNewSubPath(bounds.getX() + x, bounds.getY() + y);
+                pathStarted = true;
+            }
+            else
+            {
+                bandPath.lineTo(bounds.getX() + x, bounds.getY() + y);
+            }
+        }
+
+        // Draw band curve with transparency
+        g.setColour(bandColors[band].withAlpha(0.5f));
+        g.strokePath(bandPath, juce::PathStrokeType(1.5f));
+    }
+
+    // Draw combined frequency response curve
     juce::Path responsePath;
     bool pathStarted = false;
 
@@ -314,21 +376,30 @@ void EQVisualizer::paint(juce::Graphics& g)
         }
     }
 
-    // Fill under curve (muted teal to match panel)
+    // Fill under combined curve with gradient
     juce::Path fillPath = responsePath;
     fillPath.lineTo(bounds.getRight(), bounds.getY() + zeroY);
     fillPath.lineTo(bounds.getX(), bounds.getY() + zeroY);
     fillPath.closeSubPath();
 
-    g.setColour(VoxColors::panelEQ.brighter(0.3f).withAlpha(0.2f));
+    juce::ColourGradient fillGradient(juce::Colours::white.withAlpha(0.15f), bounds.getX(), bounds.getY(),
+                                       juce::Colours::white.withAlpha(0.02f), bounds.getX(), bounds.getBottom(), false);
+    g.setGradientFill(fillGradient);
     g.fillPath(fillPath);
 
-    // Stroke curve
-    g.setColour(juce::Colours::white.withAlpha(0.8f));
+    // Draw combined curve with glow effect
+    // Outer glow
+    g.setColour(juce::Colours::white.withAlpha(0.2f));
+    g.strokePath(responsePath, juce::PathStrokeType(6.0f));
+    // Inner glow
+    g.setColour(juce::Colours::white.withAlpha(0.4f));
+    g.strokePath(responsePath, juce::PathStrokeType(4.0f));
+    // Main stroke
+    g.setColour(juce::Colours::white);
     g.strokePath(responsePath, juce::PathStrokeType(2.0f));
 
     // Border
-    g.setColour(VoxColors::panelBorder);
+    g.setColour(juce::Colour(0xff3d3428));
     g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
 }
 
@@ -784,67 +855,78 @@ void EQSection::resized()
     auto bounds = getLocalBounds().reduced(10);
     bounds.removeFromTop(28);
 
-    // EQ Visualizer at top
-    eqVisualizer.setBounds(bounds.removeFromTop(90).reduced(20, 5));
+    // EQ Visualizer at top - taller for better visibility
+    eqVisualizer.setBounds(bounds.removeFromTop(110).reduced(20, 5));
 
-    bounds.removeFromTop(8);
+    bounds.removeFromTop(10);
 
-    const int knobSize = 40;
-    const int smallKnobSize = 34;
-    const int labelHeight = 12;
-    const int bandWidth = 88;  // Fixed width per band to prevent overlap
+    // ALL KNOBS SAME SIZE AND LARGER
+    const int knobSize = 50;  // Uniform larger size for all knobs
+    const int labelHeight = 14;
+    const int rowSpacing = 8;  // Vertical spacing between rows
 
-    int x = 15;
+    // Calculate available width for 6 bands + bypass button
+    int availableWidth = getWidth() - 100;  // Leave space for bypass
+    int bandWidth = availableWidth / 6;
+    int startX = 25;
+
     int y = bounds.getY();
 
-    // HPF - larger dropdown
-    hpfFreqLabel.setBounds(x, y, knobSize + 8, labelHeight);
-    hpfFreqSlider.setBounds(x, y + labelHeight, knobSize + 8, knobSize);
-    hpfSlopeSelector.setBounds(x, y + labelHeight + knobSize + 4, 70, 24);
-    x += bandWidth - 10;
+    // Row 1: Band labels and main gain/freq knobs
+    // Row 2: Secondary controls (freq for shelves, Q for parametric bands)
+
+    // HPF
+    int x = startX;
+    hpfFreqLabel.setBounds(x, y, knobSize, labelHeight);
+    hpfFreqSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
+    hpfSlopeSelector.setBounds(x, y + labelHeight + knobSize + 6, knobSize + 10, 24);
 
     // Low Shelf
+    x += bandWidth;
     lowShelfGainLabel.setBounds(x, y, knobSize, labelHeight);
     lowShelfGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    lowShelfFreqLabel.setBounds(x + knobSize - 2, y + 18, smallKnobSize, 10);
-    lowShelfFreqSlider.setBounds(x + knobSize - 2, y + 26, smallKnobSize, smallKnobSize);
-    x += bandWidth;
+    lowShelfFreqLabel.setBounds(x, y + labelHeight + knobSize + rowSpacing, knobSize, labelHeight);
+    lowShelfFreqSlider.setBounds(x, y + labelHeight + knobSize + rowSpacing + labelHeight, knobSize, knobSize);
 
-    // Low-Mid
+    // Low-Mid (parametric - has Q)
+    x += bandWidth;
     lowMidGainLabel.setBounds(x, y, knobSize, labelHeight);
     lowMidGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    lowMidFreqLabel.setBounds(x + knobSize - 2, y + 6, smallKnobSize, 10);
-    lowMidFreqSlider.setBounds(x + knobSize - 2, y + 14, smallKnobSize, smallKnobSize);
-    lowMidQLabel.setBounds(x + knobSize - 2, y + 46, smallKnobSize, 10);
-    lowMidQSlider.setBounds(x + knobSize - 2, y + 54, smallKnobSize, smallKnobSize);
-    x += bandWidth;
+    // Freq and Q side by side below
+    int secondRowY = y + labelHeight + knobSize + rowSpacing;
+    lowMidFreqLabel.setBounds(x - 5, secondRowY, knobSize/2 + 10, labelHeight);
+    lowMidFreqSlider.setBounds(x - 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
+    lowMidQLabel.setBounds(x + knobSize/2 + 5, secondRowY, knobSize/2 + 5, labelHeight);
+    lowMidQSlider.setBounds(x + knobSize/2 + 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
 
-    // Mid
+    // Mid (parametric - has Q)
+    x += bandWidth;
     midGainLabel.setBounds(x, y, knobSize, labelHeight);
     midGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    midFreqLabel.setBounds(x + knobSize - 2, y + 6, smallKnobSize, 10);
-    midFreqSlider.setBounds(x + knobSize - 2, y + 14, smallKnobSize, smallKnobSize);
-    midQLabel.setBounds(x + knobSize - 2, y + 46, smallKnobSize, 10);
-    midQSlider.setBounds(x + knobSize - 2, y + 54, smallKnobSize, smallKnobSize);
-    x += bandWidth;
+    midFreqLabel.setBounds(x - 5, secondRowY, knobSize/2 + 10, labelHeight);
+    midFreqSlider.setBounds(x - 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
+    midQLabel.setBounds(x + knobSize/2 + 5, secondRowY, knobSize/2 + 5, labelHeight);
+    midQSlider.setBounds(x + knobSize/2 + 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
 
-    // High-Mid
+    // High-Mid (parametric - has Q)
+    x += bandWidth;
     highMidGainLabel.setBounds(x, y, knobSize, labelHeight);
     highMidGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    highMidFreqLabel.setBounds(x + knobSize - 2, y + 6, smallKnobSize, 10);
-    highMidFreqSlider.setBounds(x + knobSize - 2, y + 14, smallKnobSize, smallKnobSize);
-    highMidQLabel.setBounds(x + knobSize - 2, y + 46, smallKnobSize, 10);
-    highMidQSlider.setBounds(x + knobSize - 2, y + 54, smallKnobSize, smallKnobSize);
-    x += bandWidth;
+    highMidFreqLabel.setBounds(x - 5, secondRowY, knobSize/2 + 10, labelHeight);
+    highMidFreqSlider.setBounds(x - 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
+    highMidQLabel.setBounds(x + knobSize/2 + 5, secondRowY, knobSize/2 + 5, labelHeight);
+    highMidQSlider.setBounds(x + knobSize/2 + 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
 
     // High Shelf
+    x += bandWidth;
     highShelfGainLabel.setBounds(x, y, knobSize, labelHeight);
     highShelfGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    highShelfFreqLabel.setBounds(x + knobSize - 2, y + 18, smallKnobSize, 10);
-    highShelfFreqSlider.setBounds(x + knobSize - 2, y + 26, smallKnobSize, smallKnobSize);
+    highShelfFreqLabel.setBounds(x, y + labelHeight + knobSize + rowSpacing, knobSize, labelHeight);
+    highShelfFreqSlider.setBounds(x, y + labelHeight + knobSize + rowSpacing + labelHeight, knobSize, knobSize);
 
-    // Footswitch-style bypass button
-    bypassButton.setBounds(getWidth() - 60, y + 60, 36, 36);
+    // Footswitch-style bypass button - vertically centered
+    int bypassY = y + (labelHeight + knobSize) / 2;
+    bypassButton.setBounds(getWidth() - 60, bypassY, 36, 36);
 }
 
 //==============================================================================
@@ -856,37 +938,38 @@ VoxProcAudioProcessorEditor::VoxProcAudioProcessorEditor(VoxProcAudioProcessor& 
     globalLookAndFeel = std::make_unique<VoxProcLookAndFeel>();
     globalLookAndFeel->setAccentColour(juce::Colours::white);
 
-    // Input/Output gain sliders
+    // Input/Output gain sliders - smaller for header placement
     inputGainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    inputGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 14);
+    inputGainSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     inputGainSlider.setColour(juce::Slider::textBoxTextColourId, VoxColors::textPrimary);
     inputGainSlider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     inputGainSlider.setTextValueSuffix(" dB");
     inputGainSlider.setLookAndFeel(globalLookAndFeel.get());
     addAndMakeVisible(inputGainSlider);
 
-    inputGainLabel.setText("INPUT", juce::dontSendNotification);
+    inputGainLabel.setText("IN", juce::dontSendNotification);
     inputGainLabel.setJustificationType(juce::Justification::centred);
     inputGainLabel.setColour(juce::Label::textColourId, VoxColors::textSecondary);
-    inputGainLabel.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+    inputGainLabel.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
     addAndMakeVisible(inputGainLabel);
 
     outputGainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    outputGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 14);
+    outputGainSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     outputGainSlider.setColour(juce::Slider::textBoxTextColourId, VoxColors::textPrimary);
     outputGainSlider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     outputGainSlider.setTextValueSuffix(" dB");
     outputGainSlider.setLookAndFeel(globalLookAndFeel.get());
     addAndMakeVisible(outputGainSlider);
 
-    outputGainLabel.setText("OUTPUT", juce::dontSendNotification);
+    outputGainLabel.setText("OUT", juce::dontSendNotification);
     outputGainLabel.setJustificationType(juce::Justification::centred);
     outputGainLabel.setColour(juce::Label::textColourId, VoxColors::textSecondary);
-    outputGainLabel.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+    outputGainLabel.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
     addAndMakeVisible(outputGainLabel);
 
-    inputMeter.setVertical(true);
-    outputMeter.setVertical(true);
+    // Horizontal meters for header (like PDLBRD)
+    inputMeter.setVertical(false);
+    outputMeter.setVertical(false);
     addAndMakeVisible(inputMeter);
     addAndMakeVisible(outputMeter);
 
