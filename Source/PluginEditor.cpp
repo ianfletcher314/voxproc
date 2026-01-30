@@ -71,6 +71,87 @@ static void drawBrushedMetalTexture(juce::Graphics& g, juce::Rectangle<float> bo
     g.fillRoundedRectangle(bounds.getX(), bounds.getY(), bounds.getWidth(), 25.0f, 10.0f);
 }
 
+static void drawFootswitch(juce::Graphics& g, juce::Rectangle<float> bounds, bool isOn, juce::Colour ledColour)
+{
+    float cx = bounds.getCentreX();
+    float cy = bounds.getCentreY();
+
+    // Metal housing/bezel
+    auto housingBounds = bounds.expanded(2.0f);
+    g.setColour(juce::Colour(0xff2a2a2a));
+    g.fillRoundedRectangle(housingBounds, 4.0f);
+    g.setColour(juce::Colour(0xff3a3a3a));
+    g.drawRoundedRectangle(housingBounds, 4.0f, 1.0f);
+
+    // Switch base (recessed area)
+    g.setColour(juce::Colour(0xff0a0a0a));
+    g.fillRoundedRectangle(bounds, 3.0f);
+
+    // The actual switch button - 3D raised look
+    auto buttonBounds = bounds.reduced(4.0f);
+    float pressOffset = isOn ? 1.0f : 0.0f;
+    buttonBounds = buttonBounds.translated(0, pressOffset);
+
+    // Button shadow (when raised/off)
+    if (!isOn)
+    {
+        g.setColour(juce::Colour(0xff000000));
+        g.fillRoundedRectangle(buttonBounds.translated(0, 2), 3.0f);
+    }
+
+    // Button top surface gradient
+    juce::ColourGradient buttonGrad(
+        isOn ? juce::Colour(0xff353535) : juce::Colour(0xff484848),
+        buttonBounds.getX(), buttonBounds.getY(),
+        isOn ? juce::Colour(0xff252525) : juce::Colour(0xff383838),
+        buttonBounds.getX(), buttonBounds.getBottom(), false);
+    g.setGradientFill(buttonGrad);
+    g.fillRoundedRectangle(buttonBounds, 3.0f);
+
+    // Button edge highlight
+    g.setColour(isOn ? juce::Colour(0xff404040) : juce::Colour(0xff555555));
+    g.drawRoundedRectangle(buttonBounds, 3.0f, 1.0f);
+
+    // Center ridge/bump on button
+    float ridgeWidth = buttonBounds.getWidth() * 0.5f;
+    float ridgeHeight = 4.0f;
+    auto ridgeBounds = juce::Rectangle<float>(
+        cx - ridgeWidth / 2, cy - ridgeHeight / 2 + pressOffset,
+        ridgeWidth, ridgeHeight);
+    g.setColour(isOn ? juce::Colour(0xff303030) : juce::Colour(0xff4a4a4a));
+    g.fillRoundedRectangle(ridgeBounds, 2.0f);
+
+    // LED to the LEFT of footswitch
+    if (ledColour.getAlpha() > 0)
+    {
+        float ledSize = 8.0f;
+        float ledX = bounds.getX() - 18.0f;
+        float ledY = cy - ledSize / 2.0f;
+
+        if (isOn)
+        {
+            // Glow
+            g.setColour(ledColour.withAlpha(0.4f));
+            g.fillEllipse(ledX - ledSize * 0.5f, ledY - ledSize * 0.5f, ledSize * 2.0f, ledSize * 2.0f);
+            g.setColour(ledColour.withAlpha(0.6f));
+            g.fillEllipse(ledX - ledSize * 0.2f, ledY - ledSize * 0.2f, ledSize * 1.4f, ledSize * 1.4f);
+
+            // Main LED
+            juce::ColourGradient ledGradient(ledColour.brighter(0.5f), ledX + ledSize/2, ledY,
+                                              ledColour, ledX + ledSize/2, ledY + ledSize, true);
+            g.setGradientFill(ledGradient);
+            g.fillEllipse(ledX, ledY, ledSize, ledSize);
+        }
+        else
+        {
+            g.setColour(ledColour.withAlpha(0.15f));
+            g.fillEllipse(ledX, ledY, ledSize, ledSize);
+            g.setColour(ledColour.withAlpha(0.3f));
+            g.drawEllipse(ledX, ledY, ledSize, ledSize, 1.0f);
+        }
+    }
+}
+
 //==============================================================================
 // LevelMeter
 //==============================================================================
@@ -273,12 +354,13 @@ CompressorSection::CompressorSection()
     makeupSlider.setTextValueSuffix(" dB");
     kneeSlider.setTextValueSuffix(" dB");
 
-    autoReleaseButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    autoReleaseButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
+    // Footswitch-style buttons (invisible, drawn manually)
+    autoReleaseButton.setClickingTogglesState(true);
+    autoReleaseButton.setAlpha(0.0f);
     addAndMakeVisible(autoReleaseButton);
 
-    bypassButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    bypassButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
+    bypassButton.setClickingTogglesState(true);
+    bypassButton.setAlpha(0.0f);
     addAndMakeVisible(bypassButton);
 
     addAndMakeVisible(grMeter);
@@ -335,6 +417,23 @@ void CompressorSection::paint(juce::Graphics& g)
     g.setColour(juce::Colours::white.withAlpha(0.9f));
     g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
     g.drawText("COMPRESSOR", bounds.removeFromTop(28).reduced(30, 0), juce::Justification::centredLeft);
+
+    // Draw footswitch-style toggle buttons
+    auto autoBounds = autoReleaseButton.getBounds().toFloat();
+    bool autoOn = autoReleaseButton.getToggleState();
+    drawFootswitch(g, autoBounds, autoOn, VoxColors::meterGreen);
+
+    // Auto label
+    g.setColour(VoxColors::textSecondary);
+    g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
+    g.drawText("AUTO", autoBounds.getX() - 30, autoBounds.getCentreY() - 6, 28, 12, juce::Justification::right);
+
+    auto bypassBounds = bypassButton.getBounds().toFloat();
+    bool bypassOn = !bypassButton.getToggleState();  // Active when NOT bypassed
+    drawFootswitch(g, bypassBounds, bypassOn, VoxColors::led);
+
+    // Bypass label
+    g.drawText("BYPASS", bypassBounds.getRight() + 4, bypassBounds.getCentreY() - 6, 40, 12, juce::Justification::left);
 }
 
 void CompressorSection::resized()
@@ -366,9 +465,9 @@ void CompressorSection::resized()
     // GR Meter
     grMeter.setBounds(x + 15, y + 18, getWidth() - x - 90, 22);
 
-    // Buttons
-    autoReleaseButton.setBounds(x + 15, y + 46, 55, 18);
-    bypassButton.setBounds(getWidth() - 75, y + 46, 55, 18);
+    // Footswitch-style buttons
+    autoReleaseButton.setBounds(x + 45, y + 52, 36, 36);
+    bypassButton.setBounds(getWidth() - 60, y + 52, 36, 36);
 }
 
 //==============================================================================
@@ -401,12 +500,13 @@ DeEsserSection::DeEsserSection()
     modeSelector.setColour(juce::ComboBox::arrowColourId, VoxColors::lcdGreen);
     addAndMakeVisible(modeSelector);
 
-    listenButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    listenButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
+    // Footswitch-style buttons (invisible, drawn manually)
+    listenButton.setClickingTogglesState(true);
+    listenButton.setAlpha(0.0f);
     addAndMakeVisible(listenButton);
 
-    bypassButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    bypassButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
+    bypassButton.setClickingTogglesState(true);
+    bypassButton.setAlpha(0.0f);
     addAndMakeVisible(bypassButton);
 
     addAndMakeVisible(grMeter);
@@ -476,6 +576,23 @@ void DeEsserSection::paint(juce::Graphics& g)
         g.setColour(VoxColors::led.withAlpha(0.2f));
     }
     g.fillEllipse(ledX, ledY, 8, 8);
+
+    // Draw footswitch-style toggle buttons
+    auto listenBounds = listenButton.getBounds().toFloat();
+    bool listenOn = listenButton.getToggleState();
+    drawFootswitch(g, listenBounds, listenOn, VoxColors::meterYellow);
+
+    // Listen label
+    g.setColour(VoxColors::textSecondary);
+    g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
+    g.drawText("LISTEN", listenBounds.getX() - 38, listenBounds.getCentreY() - 6, 36, 12, juce::Justification::right);
+
+    auto bypassBounds = bypassButton.getBounds().toFloat();
+    bool bypassOn = !bypassButton.getToggleState();  // Active when NOT bypassed
+    drawFootswitch(g, bypassBounds, bypassOn, VoxColors::led);
+
+    // Bypass label
+    g.drawText("BYPASS", bypassBounds.getRight() + 4, bypassBounds.getCentreY() - 6, 40, 12, juce::Justification::left);
 }
 
 void DeEsserSection::resized()
@@ -501,16 +618,16 @@ void DeEsserSection::resized()
     placeKnob(thresholdSlider, thresholdLabel);
     placeKnob(rangeSlider, rangeLabel);
 
-    // Mode selector
-    modeLabel.setBounds(x, y, 80, labelHeight);
-    modeSelector.setBounds(x, y + labelHeight + 5, 85, 22);
+    // Mode selector - larger and more readable
+    modeLabel.setBounds(x, y, 100, labelHeight);
+    modeSelector.setBounds(x, y + labelHeight + 5, 100, 28);
 
     // GR Meter
-    grMeter.setBounds(x + 100, y + 10, getWidth() - x - 180, 22);
+    grMeter.setBounds(x + 115, y + 10, getWidth() - x - 200, 22);
 
-    // Buttons
-    listenButton.setBounds(x + 100, y + 42, 55, 18);
-    bypassButton.setBounds(getWidth() - 75, y + 42, 55, 18);
+    // Footswitch-style buttons
+    listenButton.setBounds(x + 145, y + 52, 36, 36);
+    bypassButton.setBounds(getWidth() - 60, y + 52, 36, 36);
 }
 
 //==============================================================================
@@ -567,8 +684,9 @@ EQSection::EQSection(VoxProcAudioProcessor& p)
     highShelfFreqSlider.setTextValueSuffix(" Hz");
     highShelfGainSlider.setTextValueSuffix(" dB");
 
-    bypassButton.setColour(juce::ToggleButton::textColourId, VoxColors::textSecondary);
-    bypassButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::white);
+    // Footswitch-style button (invisible, drawn manually)
+    bypassButton.setClickingTogglesState(true);
+    bypassButton.setAlpha(0.0f);
     addAndMakeVisible(bypassButton);
 
     addAndMakeVisible(eqVisualizer);
@@ -649,6 +767,16 @@ void EQSection::paint(juce::Graphics& g)
     g.setColour(juce::Colours::white.withAlpha(0.9f));
     g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
     g.drawText("EQUALIZER", bounds.removeFromTop(28).reduced(30, 0), juce::Justification::centredLeft);
+
+    // Draw footswitch-style bypass button
+    auto bypassBounds = bypassButton.getBounds().toFloat();
+    bool bypassOn = !bypassButton.getToggleState();  // Active when NOT bypassed
+    drawFootswitch(g, bypassBounds, bypassOn, VoxColors::led);
+
+    // Bypass label
+    g.setColour(VoxColors::textSecondary);
+    g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
+    g.drawText("BYPASS", bypassBounds.getRight() + 4, bypassBounds.getCentreY() - 6, 40, 12, juce::Justification::left);
 }
 
 void EQSection::resized()
@@ -669,10 +797,10 @@ void EQSection::resized()
     int x = 15;
     int y = bounds.getY();
 
-    // HPF
+    // HPF - larger dropdown
     hpfFreqLabel.setBounds(x, y, knobSize + 8, labelHeight);
     hpfFreqSlider.setBounds(x, y + labelHeight, knobSize + 8, knobSize);
-    hpfSlopeSelector.setBounds(x, y + labelHeight + knobSize + 2, 52, 16);
+    hpfSlopeSelector.setBounds(x, y + labelHeight + knobSize + 4, 70, 24);
     x += bandWidth - 10;
 
     // Low Shelf
@@ -715,7 +843,8 @@ void EQSection::resized()
     highShelfFreqLabel.setBounds(x + knobSize - 2, y + 18, smallKnobSize, 10);
     highShelfFreqSlider.setBounds(x + knobSize - 2, y + 26, smallKnobSize, smallKnobSize);
 
-    bypassButton.setBounds(getWidth() - 75, y + 75, 55, 18);
+    // Footswitch-style bypass button
+    bypassButton.setBounds(getWidth() - 60, y + 60, 36, 36);
 }
 
 //==============================================================================
@@ -808,7 +937,7 @@ VoxProcAudioProcessorEditor::VoxProcAudioProcessorEditor(VoxProcAudioProcessor& 
     inputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "inputGain", inputGainSlider);
     outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "outputGain", outputGainSlider);
 
-    setSize(700, 600);
+    setSize(700, 640);
     startTimerHz(30);
 }
 
@@ -867,10 +996,6 @@ void VoxProcAudioProcessorEditor::paint(juce::Graphics& g)
     g.setColour(juce::Colours::white);
     g.drawText("VOXPROC", 15, 10, 200, 30, juce::Justification::centredLeft);
 
-    // Subtitle
-    g.setColour(VoxColors::textSecondary);
-    g.setFont(juce::FontOptions(9.0f));
-    g.drawText("Vocal Processing", 15, 32, 150, 14, juce::Justification::centredLeft);
 }
 
 void VoxProcAudioProcessorEditor::resized()
@@ -887,23 +1012,23 @@ void VoxProcAudioProcessorEditor::resized()
     auto leftArea = bounds.removeFromLeft(65);
     inputGainLabel.setBounds(leftArea.getX() + 10, leftArea.getY() + 5, 45, 14);
     inputGainSlider.setBounds(leftArea.getX() + 10, leftArea.getY() + 17, gainKnobSize, gainKnobSize);
-    inputMeter.setBounds(leftArea.getX() + 12, leftArea.getY() + 70, meterWidth, leftArea.getHeight() - 80);
+    inputMeter.setBounds(leftArea.getX() + 4, leftArea.getY() + 70, gainKnobSize, leftArea.getHeight() - 80);
 
     // Right side: Output meter and gain
     auto rightArea = bounds.removeFromRight(65);
     outputGainLabel.setBounds(rightArea.getX() + 10, rightArea.getY() + 5, 45, 14);
     outputGainSlider.setBounds(rightArea.getX() + 10, rightArea.getY() + 17, gainKnobSize, gainKnobSize);
-    outputMeter.setBounds(rightArea.getX() + 12, rightArea.getY() + 70, meterWidth, rightArea.getHeight() - 80);
+    outputMeter.setBounds(rightArea.getX() + 4, rightArea.getY() + 70, gainKnobSize, rightArea.getHeight() - 80);
 
     // Main content area
     bounds.reduce(margin, margin);
 
     // Compressor section
-    compressorSection.setBounds(bounds.removeFromTop(105));
+    compressorSection.setBounds(bounds.removeFromTop(125));
     bounds.removeFromTop(margin);
 
     // De-esser section
-    deEsserSection.setBounds(bounds.removeFromTop(105));
+    deEsserSection.setBounds(bounds.removeFromTop(125));
     bounds.removeFromTop(margin);
 
     // EQ section (takes remaining space)
