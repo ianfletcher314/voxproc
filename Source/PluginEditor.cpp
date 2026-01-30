@@ -860,73 +860,70 @@ void EQSection::resized()
 
     bounds.removeFromTop(10);
 
-    // ALL KNOBS SAME SIZE AND LARGER
-    const int knobSize = 50;  // Uniform larger size for all knobs
-    const int labelHeight = 14;
-    const int rowSpacing = 8;  // Vertical spacing between rows
+    // ALL KNOBS SAME SIZE - 55px uniform
+    const int knobSize = 55;
+    const int smallKnobSize = 45;  // For freq/Q secondary knobs
+    const int labelHeight = 12;
+    const int rowSpacing = 4;
 
     // Calculate available width for 6 bands + bypass button
-    int availableWidth = getWidth() - 100;  // Leave space for bypass
+    int availableWidth = getWidth() - 80;
     int bandWidth = availableWidth / 6;
-    int startX = 25;
+    int startX = 15;
 
     int y = bounds.getY();
+    int secondRowY = y + labelHeight + knobSize + rowSpacing;
 
-    // Row 1: Band labels and main gain/freq knobs
-    // Row 2: Secondary controls (freq for shelves, Q for parametric bands)
-
-    // HPF
+    // HPF - just freq and slope
     int x = startX;
     hpfFreqLabel.setBounds(x, y, knobSize, labelHeight);
     hpfFreqSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    hpfSlopeSelector.setBounds(x, y + labelHeight + knobSize + 6, knobSize + 10, 24);
+    hpfSlopeSelector.setBounds(x, secondRowY + labelHeight, knobSize, 28);
 
-    // Low Shelf
+    // Low Shelf - gain and freq stacked
     x += bandWidth;
     lowShelfGainLabel.setBounds(x, y, knobSize, labelHeight);
     lowShelfGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    lowShelfFreqLabel.setBounds(x, y + labelHeight + knobSize + rowSpacing, knobSize, labelHeight);
-    lowShelfFreqSlider.setBounds(x, y + labelHeight + knobSize + rowSpacing + labelHeight, knobSize, knobSize);
+    lowShelfFreqLabel.setBounds(x, secondRowY, smallKnobSize, labelHeight);
+    lowShelfFreqSlider.setBounds(x, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
 
-    // Low-Mid (parametric - has Q)
+    // Low-Mid - gain, freq, Q
     x += bandWidth;
     lowMidGainLabel.setBounds(x, y, knobSize, labelHeight);
     lowMidGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    // Freq and Q side by side below
-    int secondRowY = y + labelHeight + knobSize + rowSpacing;
-    lowMidFreqLabel.setBounds(x - 5, secondRowY, knobSize/2 + 10, labelHeight);
-    lowMidFreqSlider.setBounds(x - 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
-    lowMidQLabel.setBounds(x + knobSize/2 + 5, secondRowY, knobSize/2 + 5, labelHeight);
-    lowMidQSlider.setBounds(x + knobSize/2 + 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
+    lowMidFreqLabel.setBounds(x - 2, secondRowY, smallKnobSize, labelHeight);
+    lowMidFreqSlider.setBounds(x - 2, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
+    lowMidQLabel.setBounds(x + smallKnobSize + 2, secondRowY, smallKnobSize - 10, labelHeight);
+    lowMidQSlider.setBounds(x + smallKnobSize + 2, secondRowY + labelHeight, smallKnobSize - 10, smallKnobSize - 10);
 
-    // Mid (parametric - has Q)
+    // Mid - gain, freq, Q
     x += bandWidth;
     midGainLabel.setBounds(x, y, knobSize, labelHeight);
     midGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    midFreqLabel.setBounds(x - 5, secondRowY, knobSize/2 + 10, labelHeight);
-    midFreqSlider.setBounds(x - 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
-    midQLabel.setBounds(x + knobSize/2 + 5, secondRowY, knobSize/2 + 5, labelHeight);
-    midQSlider.setBounds(x + knobSize/2 + 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
+    midFreqLabel.setBounds(x - 2, secondRowY, smallKnobSize, labelHeight);
+    midFreqSlider.setBounds(x - 2, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
+    midQLabel.setBounds(x + smallKnobSize + 2, secondRowY, smallKnobSize - 10, labelHeight);
+    midQSlider.setBounds(x + smallKnobSize + 2, secondRowY + labelHeight, smallKnobSize - 10, smallKnobSize - 10);
 
-    // High-Mid (parametric - has Q)
+    // High-Mid - gain, freq, Q
     x += bandWidth;
     highMidGainLabel.setBounds(x, y, knobSize, labelHeight);
     highMidGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    highMidFreqLabel.setBounds(x - 5, secondRowY, knobSize/2 + 10, labelHeight);
-    highMidFreqSlider.setBounds(x - 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
-    highMidQLabel.setBounds(x + knobSize/2 + 5, secondRowY, knobSize/2 + 5, labelHeight);
-    highMidQSlider.setBounds(x + knobSize/2 + 5, secondRowY + labelHeight, knobSize/2 + 10, knobSize/2 + 10);
+    highMidFreqLabel.setBounds(x - 2, secondRowY, smallKnobSize, labelHeight);
+    highMidFreqSlider.setBounds(x - 2, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
+    highMidQLabel.setBounds(x + smallKnobSize + 2, secondRowY, smallKnobSize - 10, labelHeight);
+    highMidQSlider.setBounds(x + smallKnobSize + 2, secondRowY + labelHeight, smallKnobSize - 10, smallKnobSize - 10);
 
-    // High Shelf
+    // High Shelf - gain and freq stacked
     x += bandWidth;
     highShelfGainLabel.setBounds(x, y, knobSize, labelHeight);
     highShelfGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    highShelfFreqLabel.setBounds(x, y + labelHeight + knobSize + rowSpacing, knobSize, labelHeight);
-    highShelfFreqSlider.setBounds(x, y + labelHeight + knobSize + rowSpacing + labelHeight, knobSize, knobSize);
+    highShelfFreqLabel.setBounds(x, secondRowY, smallKnobSize, labelHeight);
+    highShelfFreqSlider.setBounds(x, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
 
-    // Footswitch-style bypass button - vertically centered
-    int bypassY = y + (labelHeight + knobSize) / 2;
-    bypassButton.setBounds(getWidth() - 60, bypassY, 36, 36);
+    // Footswitch-style bypass button
+    int bypassY = y + knobSize / 2;
+    bypassButton.setBounds(getWidth() - 55, bypassY, 40, 40);
 }
 
 //==============================================================================
