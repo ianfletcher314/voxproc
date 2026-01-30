@@ -1,0 +1,29 @@
+# Build artifacts
+Builds/*/build/
+Builds/*/*.xcworkspace
+Builds/*/xcuserdata/
+*.o
+*.a
+*.dylib
+*.component
+*.vst3
+*.au
+
+# IDE files
+*.xcuserstate
+*.xcuserdatad
+.idea/
+*.suo
+*.user
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependencies (if using package managers)
+node_modules/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
