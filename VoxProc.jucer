@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="VOXPRC1" name="VoxProc" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="VoxProc"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" companyName="Fletcher"
               companyCopyright="2024" companyWebsite="https://github.com/ianfletcher314/voxproc"
               pluginFormats="buildAU,buildVST3" pluginCharacteristicsValue=""
               pluginName="VoxProc" pluginDesc="Vocal processing plugin with compression, de-essing, and EQ"
-              pluginManufacturer="Fletcher" pluginManufacturerCode="VoxP" pluginCode="Vxpc"
+              pluginManufacturer="Fletcher" pluginManufacturerCode="Flet" pluginCode="Vxpc"
               pluginVST3Category="Fx" pluginAUMainType="'aufx'">
   <MAINGROUP id="MAINGRP" name="VoxProc">
     <GROUP id="SOURCE" name="Source">

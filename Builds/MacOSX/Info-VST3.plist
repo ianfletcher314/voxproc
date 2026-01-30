@@ -8,7 +8,7 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.VoxProc.VoxProc</string>
+    <string>com.Fletcher.VoxProc</string>
     <key>CFBundleName</key>
     <string>VoxProc</string>
     <key>CFBundleDisplayName</key>
