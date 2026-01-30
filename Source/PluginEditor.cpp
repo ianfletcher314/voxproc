@@ -263,6 +263,75 @@ float EQVisualizer::getBandMagnitudeAtFrequency(float freq, int bandIndex) const
     return processor.getEQBandMagnitudeAtFrequency(freq, bandIndex);
 }
 
+float EQVisualizer::binToFreq(int bin, double sampleRate) const
+{
+    return (float)bin * (float)sampleRate / (float)fftSize;
+}
+
+void EQVisualizer::drawSpectrum(juce::Graphics& g, const std::array<float, fftSize / 2>& spectrum,
+                                 juce::Colour colour, float alpha, juce::Rectangle<float> bounds)
+{
+    double sampleRate = processor.getCurrentSampleRate();
+    juce::Path spectrumPath;
+    bool pathStarted = false;
+
+    // We'll draw from 20Hz to 20kHz
+    for (float x = 0; x < bounds.getWidth(); x += 1.0f)
+    {
+        // Convert x position to frequency (logarithmic scale)
+        float freq = 20.0f * std::pow(1000.0f, x / bounds.getWidth());
+
+        // Find the FFT bin for this frequency
+        int bin = (int)(freq * fftSize / sampleRate);
+        if (bin < 0) bin = 0;
+        if (bin >= fftSize / 2) bin = fftSize / 2 - 1;
+
+        // Get magnitude and convert to dB
+        float magnitude = spectrum[bin];
+
+        // Interpolate between bins for smoother display
+        if (bin > 0 && bin < fftSize / 2 - 1)
+        {
+            float frac = (freq * fftSize / sampleRate) - bin;
+            magnitude = spectrum[bin] * (1.0f - frac) + spectrum[bin + 1] * frac;
+        }
+
+        // Boost magnitude to make display more sensitive (20x boost = +26dB)
+        magnitude *= 20.0f;
+
+        // Convert to dB (with floor at -60dB)
+        float db = magnitude > 0.0001f ? 20.0f * std::log10(magnitude) : -60.0f;
+        db = juce::jlimit(-60.0f, 6.0f, db);
+
+        // Map dB to Y position (-60dB at bottom, +6dB at top)
+        float normalizedDb = (db + 60.0f) / 66.0f;  // 0 to 1
+        float y = bounds.getHeight() * (1.0f - normalizedDb);
+
+        if (!pathStarted)
+        {
+            spectrumPath.startNewSubPath(bounds.getX() + x, bounds.getY() + y);
+            pathStarted = true;
+        }
+        else
+        {
+            spectrumPath.lineTo(bounds.getX() + x, bounds.getY() + y);
+        }
+    }
+
+    // Draw filled spectrum
+    juce::Path fillPath = spectrumPath;
+    fillPath.lineTo(bounds.getRight(), bounds.getBottom());
+    fillPath.lineTo(bounds.getX(), bounds.getBottom());
+    fillPath.closeSubPath();
+
+    g.setColour(colour.withAlpha(alpha * 0.3f));
+    g.fillPath(fillPath);
+
+    // Draw spectrum line
+    g.setColour(colour.withAlpha(alpha));
+    g.strokePath(spectrumPath, juce::PathStrokeType(1.5f));
+}
+
 void EQVisualizer::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
@@ -310,6 +379,10 @@ void EQVisualizer::paint(juce::Graphics& g)
     g.drawText("+12", (int)(bounds.getX() + 2), (int)(bounds.getY() + dbToY(12.0f, bounds.getHeight()) - 5), 20, 10, juce::Justification::left);
     g.drawText("0", (int)(bounds.getX() + 2), (int)(bounds.getY() + zeroY - 5), 20, 10, juce::Justification::left);
     g.drawText("-12", (int)(bounds.getX() + 2), (int)(bounds.getY() + dbToY(-12.0f, bounds.getHeight()) - 5), 20, 10, juce::Justification::left);
+
+    // Draw spectrum analyzer (input = faint blue, output = brighter green)
+    drawSpectrum(g, processor.getInputSpectrum(), juce::Colour(colorInputSpectrum), 0.4f, bounds);
+    drawSpectrum(g, processor.getOutputSpectrum(), juce::Colour(colorOutputSpectrum), 0.7f, bounds);
 
     // Band colors
     const juce::Colour bandColors[] = {
@@ -487,29 +560,46 @@ void CompressorSection::paint(juce::Graphics& g)
     // Title
     g.setColour(juce::Colours::white.withAlpha(0.9f));
     g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
-    g.drawText("COMPRESSOR", bounds.removeFromTop(28).reduced(30, 0), juce::Justification::centredLeft);
+    g.drawText("COMPRESSOR", bounds.getX() + 30, bounds.getY() + 6, 120, 20, juce::Justification::centredLeft);
 
-    // Draw footswitch-style toggle buttons
+    // Draw small toggle buttons in header area
     auto autoBounds = autoReleaseButton.getBounds().toFloat();
     bool autoOn = autoReleaseButton.getToggleState();
-    drawFootswitch(g, autoBounds, autoOn, VoxColors::meterGreen);
 
-    // Auto label
-    g.setColour(VoxColors::textSecondary);
-    g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
-    g.drawText("AUTO", autoBounds.getX() - 30, autoBounds.getCentreY() - 6, 28, 12, juce::Justification::right);
+    // Auto button - solid background
+    g.setColour(autoOn ? VoxColors::meterGreen : juce::Colour(0xff2a2a2a));
+    g.fillRoundedRectangle(autoBounds, 3.0f);
+    g.setColour(juce::Colour(0xff444444));
+    g.drawRoundedRectangle(autoBounds, 3.0f, 1.0f);
+
+    // Auto label - legible
+    g.setColour(autoOn ? juce::Colours::black : juce::Colours::white);
+    g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+    g.drawText("AUTO", (int)autoBounds.getX(), (int)autoBounds.getY(), (int)autoBounds.getWidth(), (int)autoBounds.getHeight(), juce::Justification::centred);
 
     auto bypassBounds = bypassButton.getBounds().toFloat();
-    bool bypassOn = !bypassButton.getToggleState();  // Active when NOT bypassed
-    drawFootswitch(g, bypassBounds, bypassOn, VoxColors::led);
+    bool bypassOn = bypassButton.getToggleState();
+
+    // Bypass button - solid background
+    g.setColour(bypassOn ? VoxColors::led : juce::Colour(0xff2a2a2a));
+    g.fillRoundedRectangle(bypassBounds, 3.0f);
+    g.setColour(juce::Colour(0xff444444));
+    g.drawRoundedRectangle(bypassBounds, 3.0f, 1.0f);
 
     // Bypass label
-    g.drawText("BYPASS", bypassBounds.getRight() + 4, bypassBounds.getCentreY() - 6, 40, 12, juce::Justification::left);
+    g.setColour(bypassOn ? juce::Colours::white : juce::Colours::white);
+    g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+    g.drawText("BYPASS", (int)bypassBounds.getX(), (int)bypassBounds.getY(), (int)bypassBounds.getWidth(), (int)bypassBounds.getHeight(), juce::Justification::centred);
 }
 
 void CompressorSection::resized()
 {
     auto bounds = getLocalBounds().reduced(10);
+
+    // Small toggle buttons in header area (moved left to avoid corner bolt)
+    autoReleaseButton.setBounds(getWidth() - 155, 8, 50, 18);
+    bypassButton.setBounds(getWidth() - 95, 8, 55, 18);
+
     bounds.removeFromTop(28); // Title
 
     const int knobSize = 50;
@@ -533,12 +623,8 @@ void CompressorSection::resized()
     placeKnob(makeupSlider, makeupLabel);
     placeKnob(kneeSlider, kneeLabel);
 
-    // GR Meter
-    grMeter.setBounds(x + 15, y + 18, getWidth() - x - 90, 22);
-
-    // Footswitch-style buttons
-    autoReleaseButton.setBounds(x + 45, y + 52, 36, 36);
-    bypassButton.setBounds(getWidth() - 60, y + 52, 36, 36);
+    // GR Meter - now has more space
+    grMeter.setBounds(x + 15, y + 18, getWidth() - x - 40, 22);
 }
 
 //==============================================================================
@@ -627,15 +713,14 @@ void DeEsserSection::paint(juce::Graphics& g)
     drawScrew(g, bounds.getX() + screwInset, bounds.getBottom() - screwInset, screwSize);
     drawScrew(g, bounds.getRight() - screwInset, bounds.getBottom() - screwInset, screwSize);
 
-    // Title with activity LED
-    auto titleArea = bounds.removeFromTop(28).reduced(30, 0);
+    // Title
     g.setColour(juce::Colours::white.withAlpha(0.9f));
     g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
-    g.drawText("DE-ESSER", titleArea, juce::Justification::centredLeft);
+    g.drawText("DE-ESSER", bounds.getX() + 30, bounds.getY() + 6, 100, 20, juce::Justification::centredLeft);
 
-    // Activity LED
-    float ledX = titleArea.getRight() - 15;
-    float ledY = titleArea.getCentreY() - 4;
+    // Activity LED (next to title)
+    float ledX = bounds.getX() + 130;
+    float ledY = bounds.getY() + 12;
     if (isActive)
     {
         g.setColour(VoxColors::led.withAlpha(0.4f));
@@ -648,27 +733,44 @@ void DeEsserSection::paint(juce::Graphics& g)
     }
     g.fillEllipse(ledX, ledY, 8, 8);
 
-    // Draw footswitch-style toggle buttons
+    // Draw small toggle buttons in header area
     auto listenBounds = listenButton.getBounds().toFloat();
     bool listenOn = listenButton.getToggleState();
-    drawFootswitch(g, listenBounds, listenOn, VoxColors::meterYellow);
+
+    // Listen button - solid background
+    g.setColour(listenOn ? VoxColors::meterYellow : juce::Colour(0xff2a2a2a));
+    g.fillRoundedRectangle(listenBounds, 3.0f);
+    g.setColour(juce::Colour(0xff444444));
+    g.drawRoundedRectangle(listenBounds, 3.0f, 1.0f);
 
     // Listen label
-    g.setColour(VoxColors::textSecondary);
-    g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
-    g.drawText("LISTEN", listenBounds.getX() - 38, listenBounds.getCentreY() - 6, 36, 12, juce::Justification::right);
+    g.setColour(listenOn ? juce::Colours::black : juce::Colours::white);
+    g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+    g.drawText("LISTEN", (int)listenBounds.getX(), (int)listenBounds.getY(), (int)listenBounds.getWidth(), (int)listenBounds.getHeight(), juce::Justification::centred);
 
     auto bypassBounds = bypassButton.getBounds().toFloat();
-    bool bypassOn = !bypassButton.getToggleState();  // Active when NOT bypassed
-    drawFootswitch(g, bypassBounds, bypassOn, VoxColors::led);
+    bool bypassOn = bypassButton.getToggleState();
+
+    // Bypass button - solid background
+    g.setColour(bypassOn ? VoxColors::led : juce::Colour(0xff2a2a2a));
+    g.fillRoundedRectangle(bypassBounds, 3.0f);
+    g.setColour(juce::Colour(0xff444444));
+    g.drawRoundedRectangle(bypassBounds, 3.0f, 1.0f);
 
     // Bypass label
-    g.drawText("BYPASS", bypassBounds.getRight() + 4, bypassBounds.getCentreY() - 6, 40, 12, juce::Justification::left);
+    g.setColour(bypassOn ? juce::Colours::white : juce::Colours::white);
+    g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+    g.drawText("BYPASS", (int)bypassBounds.getX(), (int)bypassBounds.getY(), (int)bypassBounds.getWidth(), (int)bypassBounds.getHeight(), juce::Justification::centred);
 }
 
 void DeEsserSection::resized()
 {
     auto bounds = getLocalBounds().reduced(10);
+
+    // Small toggle buttons in header area (moved left to avoid corner bolt)
+    listenButton.setBounds(getWidth() - 155, 8, 50, 18);
+    bypassButton.setBounds(getWidth() - 95, 8, 55, 18);
+
     bounds.removeFromTop(28);
 
     const int knobSize = 50;
@@ -689,16 +791,13 @@ void DeEsserSection::resized()
     placeKnob(thresholdSlider, thresholdLabel);
     placeKnob(rangeSlider, rangeLabel);
 
-    // Mode selector - larger and more readable
-    modeLabel.setBounds(x, y, 100, labelHeight);
-    modeSelector.setBounds(x, y + labelHeight + 5, 100, 28);
+    // Mode selector - larger and more readable (same height as knobs area)
+    modeLabel.setBounds(x, y, 120, labelHeight);
+    modeSelector.setBounds(x, y + labelHeight + 5, 120, 32);
 
-    // GR Meter
-    grMeter.setBounds(x + 115, y + 10, getWidth() - x - 200, 22);
-
-    // Footswitch-style buttons
-    listenButton.setBounds(x + 145, y + 52, 36, 36);
-    bypassButton.setBounds(getWidth() - 60, y + 52, 36, 36);
+    // GR Meter - same size as compressor (aligned with mode selector)
+    int meterX = x + 135;
+    grMeter.setBounds(meterX, y + 18, getWidth() - meterX - 30, 22);
 }
 
 //==============================================================================
@@ -837,22 +936,31 @@ void EQSection::paint(juce::Graphics& g)
     // Title
     g.setColour(juce::Colours::white.withAlpha(0.9f));
     g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
-    g.drawText("EQUALIZER", bounds.removeFromTop(28).reduced(30, 0), juce::Justification::centredLeft);
+    g.drawText("EQUALIZER", bounds.getX() + 30, bounds.getY() + 6, 100, 20, juce::Justification::centredLeft);
 
-    // Draw footswitch-style bypass button
+    // Draw small toggle button in header area
     auto bypassBounds = bypassButton.getBounds().toFloat();
-    bool bypassOn = !bypassButton.getToggleState();  // Active when NOT bypassed
-    drawFootswitch(g, bypassBounds, bypassOn, VoxColors::led);
+    bool bypassOn = bypassButton.getToggleState();
+
+    // Bypass button - solid background
+    g.setColour(bypassOn ? VoxColors::led : juce::Colour(0xff2a2a2a));
+    g.fillRoundedRectangle(bypassBounds, 3.0f);
+    g.setColour(juce::Colour(0xff444444));
+    g.drawRoundedRectangle(bypassBounds, 3.0f, 1.0f);
 
     // Bypass label
-    g.setColour(VoxColors::textSecondary);
-    g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
-    g.drawText("BYPASS", bypassBounds.getRight() + 4, bypassBounds.getCentreY() - 6, 40, 12, juce::Justification::left);
+    g.setColour(bypassOn ? juce::Colours::white : juce::Colours::white);
+    g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+    g.drawText("BYPASS", (int)bypassBounds.getX(), (int)bypassBounds.getY(), (int)bypassBounds.getWidth(), (int)bypassBounds.getHeight(), juce::Justification::centred);
 }
 
 void EQSection::resized()
 {
     auto bounds = getLocalBounds().reduced(10);
+
+    // Small toggle button in header area (moved left to avoid corner bolt)
+    bypassButton.setBounds(getWidth() - 95, 8, 55, 18);
+
     bounds.removeFromTop(28);
 
     // EQ Visualizer at top - taller for better visibility
@@ -860,70 +968,66 @@ void EQSection::resized()
 
     bounds.removeFromTop(10);
 
-    // ALL KNOBS SAME SIZE - 55px uniform
-    const int knobSize = 55;
-    const int smallKnobSize = 45;  // For freq/Q secondary knobs
+    // ALL KNOBS EXACTLY THE SAME SIZE - 50px
+    const int knobSize = 50;
     const int labelHeight = 12;
-    const int rowSpacing = 4;
+    const int rowSpacing = 6;
 
-    // Calculate available width for 6 bands + bypass button
-    int availableWidth = getWidth() - 80;
+    // Calculate layout - 6 columns for EQ bands (full width now)
+    int availableWidth = getWidth() - 20;
     int bandWidth = availableWidth / 6;
-    int startX = 15;
+    int startX = 10;
 
     int y = bounds.getY();
-    int secondRowY = y + labelHeight + knobSize + rowSpacing;
+    int row2Y = y + labelHeight + knobSize + rowSpacing;
+    int row3Y = row2Y + labelHeight + knobSize + rowSpacing;
 
-    // HPF - just freq and slope
-    int x = startX;
+    // HPF - freq on row 1, slope selector on row 2 (wider and taller for legibility)
+    int x = startX + bandWidth / 2 - knobSize / 2;
     hpfFreqLabel.setBounds(x, y, knobSize, labelHeight);
     hpfFreqSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    hpfSlopeSelector.setBounds(x, secondRowY + labelHeight, knobSize, 28);
+    hpfSlopeSelector.setBounds(x - 15, row2Y + labelHeight, knobSize + 30, 30);
 
-    // Low Shelf - gain and freq stacked
-    x += bandWidth;
+    // Low Shelf - gain on row 1, freq on row 2
+    x = startX + bandWidth + bandWidth / 2 - knobSize / 2;
     lowShelfGainLabel.setBounds(x, y, knobSize, labelHeight);
     lowShelfGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    lowShelfFreqLabel.setBounds(x, secondRowY, smallKnobSize, labelHeight);
-    lowShelfFreqSlider.setBounds(x, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
+    lowShelfFreqLabel.setBounds(x, row2Y, knobSize, labelHeight);
+    lowShelfFreqSlider.setBounds(x, row2Y + labelHeight, knobSize, knobSize);
 
-    // Low-Mid - gain, freq, Q
-    x += bandWidth;
+    // Low-Mid - gain on row 1, freq on row 2, Q on row 3
+    x = startX + bandWidth * 2 + bandWidth / 2 - knobSize / 2;
     lowMidGainLabel.setBounds(x, y, knobSize, labelHeight);
     lowMidGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    lowMidFreqLabel.setBounds(x - 2, secondRowY, smallKnobSize, labelHeight);
-    lowMidFreqSlider.setBounds(x - 2, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
-    lowMidQLabel.setBounds(x + smallKnobSize + 2, secondRowY, smallKnobSize - 10, labelHeight);
-    lowMidQSlider.setBounds(x + smallKnobSize + 2, secondRowY + labelHeight, smallKnobSize - 10, smallKnobSize - 10);
+    lowMidFreqLabel.setBounds(x, row2Y, knobSize, labelHeight);
+    lowMidFreqSlider.setBounds(x, row2Y + labelHeight, knobSize, knobSize);
+    lowMidQLabel.setBounds(x, row3Y, knobSize, labelHeight);
+    lowMidQSlider.setBounds(x, row3Y + labelHeight, knobSize, knobSize);
 
-    // Mid - gain, freq, Q
-    x += bandWidth;
+    // Mid - gain on row 1, freq on row 2, Q on row 3
+    x = startX + bandWidth * 3 + bandWidth / 2 - knobSize / 2;
     midGainLabel.setBounds(x, y, knobSize, labelHeight);
     midGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    midFreqLabel.setBounds(x - 2, secondRowY, smallKnobSize, labelHeight);
-    midFreqSlider.setBounds(x - 2, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
-    midQLabel.setBounds(x + smallKnobSize + 2, secondRowY, smallKnobSize - 10, labelHeight);
-    midQSlider.setBounds(x + smallKnobSize + 2, secondRowY + labelHeight, smallKnobSize - 10, smallKnobSize - 10);
+    midFreqLabel.setBounds(x, row2Y, knobSize, labelHeight);
+    midFreqSlider.setBounds(x, row2Y + labelHeight, knobSize, knobSize);
+    midQLabel.setBounds(x, row3Y, knobSize, labelHeight);
+    midQSlider.setBounds(x, row3Y + labelHeight, knobSize, knobSize);
 
-    // High-Mid - gain, freq, Q
-    x += bandWidth;
+    // High-Mid - gain on row 1, freq on row 2, Q on row 3
+    x = startX + bandWidth * 4 + bandWidth / 2 - knobSize / 2;
     highMidGainLabel.setBounds(x, y, knobSize, labelHeight);
     highMidGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    highMidFreqLabel.setBounds(x - 2, secondRowY, smallKnobSize, labelHeight);
-    highMidFreqSlider.setBounds(x - 2, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
-    highMidQLabel.setBounds(x + smallKnobSize + 2, secondRowY, smallKnobSize - 10, labelHeight);
-    highMidQSlider.setBounds(x + smallKnobSize + 2, secondRowY + labelHeight, smallKnobSize - 10, smallKnobSize - 10);
+    highMidFreqLabel.setBounds(x, row2Y, knobSize, labelHeight);
+    highMidFreqSlider.setBounds(x, row2Y + labelHeight, knobSize, knobSize);
+    highMidQLabel.setBounds(x, row3Y, knobSize, labelHeight);
+    highMidQSlider.setBounds(x, row3Y + labelHeight, knobSize, knobSize);
 
-    // High Shelf - gain and freq stacked
-    x += bandWidth;
+    // High Shelf - gain on row 1, freq on row 2
+    x = startX + bandWidth * 5 + bandWidth / 2 - knobSize / 2;
     highShelfGainLabel.setBounds(x, y, knobSize, labelHeight);
     highShelfGainSlider.setBounds(x, y + labelHeight, knobSize, knobSize);
-    highShelfFreqLabel.setBounds(x, secondRowY, smallKnobSize, labelHeight);
-    highShelfFreqSlider.setBounds(x, secondRowY + labelHeight, smallKnobSize, smallKnobSize);
-
-    // Footswitch-style bypass button
-    int bypassY = y + knobSize / 2;
-    bypassButton.setBounds(getWidth() - 55, bypassY, 40, 40);
+    highShelfFreqLabel.setBounds(x, row2Y, knobSize, labelHeight);
+    highShelfFreqSlider.setBounds(x, row2Y + labelHeight, knobSize, knobSize);
 }
 
 //==============================================================================
@@ -1017,7 +1121,7 @@ VoxProcAudioProcessorEditor::VoxProcAudioProcessorEditor(VoxProcAudioProcessor& 
     inputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "inputGain", inputGainSlider);
     outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "outputGain", outputGainSlider);
 
-    setSize(700, 640);
+    setSize(700, 780);  // Taller to fit all EQ controls including Q knobs
     startTimerHz(30);
 }
 
@@ -1048,7 +1152,8 @@ void VoxProcAudioProcessorEditor::timerCallback()
     deEsserSection.grMeter.setGainReduction(audioProcessor.getDeEsserGainReduction());
     deEsserSection.setActive(audioProcessor.isDeEsserActive());
 
-    // Repaint EQ visualizer
+    // Update EQ parameters and repaint visualizer
+    audioProcessor.updateEQForVisualization();
     eqSection.eqVisualizer.repaint();
 }
 
@@ -1076,31 +1181,36 @@ void VoxProcAudioProcessorEditor::paint(juce::Graphics& g)
     g.setColour(juce::Colours::white);
     g.drawText("VOXPROC", 15, 10, 200, 30, juce::Justification::centredLeft);
 
+    // Meter labels in header (like PDLBRD)
+    g.setColour(juce::Colour(0xffaaaaaa));
+    g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
+    g.drawText("IN", 480, 10, 20, 12, juce::Justification::left);
+    g.drawText("OUT", 480, 28, 24, 12, juce::Justification::left);
 }
 
 void VoxProcAudioProcessorEditor::resized()
 {
     const int headerHeight = 50;
     const int margin = 8;
-    const int meterWidth = 14;
-    const int gainKnobSize = 45;
+
+    // HORIZONTAL METERS IN HEADER (like PDLBRD)
+    int meterLeft = 505;
+    int meterWidth = getWidth() - meterLeft - 15;
+    inputMeter.setVertical(false);
+    outputMeter.setVertical(false);
+    inputMeter.setBounds(meterLeft, 10, meterWidth, 14);
+    outputMeter.setBounds(meterLeft, 28, meterWidth, 14);
+
+    // Input/Output gain knobs in header area
+    inputGainLabel.setBounds(140, 8, 40, 12);
+    inputGainSlider.setBounds(180, 5, 40, 40);
+    outputGainLabel.setBounds(230, 8, 40, 12);
+    outputGainSlider.setBounds(275, 5, 40, 40);
 
     auto bounds = getLocalBounds();
     bounds.removeFromTop(headerHeight);
 
-    // Left side: Input meter and gain
-    auto leftArea = bounds.removeFromLeft(65);
-    inputGainLabel.setBounds(leftArea.getX() + 10, leftArea.getY() + 5, 45, 14);
-    inputGainSlider.setBounds(leftArea.getX() + 10, leftArea.getY() + 17, gainKnobSize, gainKnobSize);
-    inputMeter.setBounds(leftArea.getX() + 4, leftArea.getY() + 70, gainKnobSize, leftArea.getHeight() - 80);
-
-    // Right side: Output meter and gain
-    auto rightArea = bounds.removeFromRight(65);
-    outputGainLabel.setBounds(rightArea.getX() + 10, rightArea.getY() + 5, 45, 14);
-    outputGainSlider.setBounds(rightArea.getX() + 10, rightArea.getY() + 17, gainKnobSize, gainKnobSize);
-    outputMeter.setBounds(rightArea.getX() + 4, rightArea.getY() + 70, gainKnobSize, rightArea.getHeight() - 80);
-
-    // Main content area
+    // Main content area - FULL WIDTH now (no side meters)
     bounds.reduce(margin, margin);
 
     // Compressor section

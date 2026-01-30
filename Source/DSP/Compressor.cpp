@@ -17,6 +17,7 @@ void Compressor::reset()
     envelopeR = 0.0f;
     currentGainReduction = 0.0f;
     smoothedGainReduction = 0.0f;
+    smoothedGain = 1.0f;
 }
 
 void Compressor::updateCoefficients()
@@ -160,6 +161,10 @@ void Compressor::process(juce::AudioBuffer<float>& buffer)
 
     float maxGR = 0.0f;
 
+    // Smoothing coefficient for gain changes (prevents clicks/pops)
+    // Use a fast smoothing time of ~1ms
+    float gainSmoothCoeff = DSPUtils::calculateCoefficient(currentSampleRate, 1.0f);
+
     for (int i = 0; i < numSamples; ++i)
     {
         float inL = leftChannel[i];
@@ -169,12 +174,15 @@ void Compressor::process(juce::AudioBuffer<float>& buffer)
         maxGR = std::max(maxGR, gainReductionDb);
 
         // Convert gain reduction to linear
-        float gainLinear = DSPUtils::decibelsToLinear(-gainReductionDb);
+        float targetGain = DSPUtils::decibelsToLinear(-gainReductionDb);
+
+        // Smooth the gain to prevent clicks/pops
+        smoothedGain += gainSmoothCoeff * (targetGain - smoothedGain);
 
         // Apply compression with makeup gain
-        leftChannel[i] = inL * gainLinear * makeupLinear;
+        leftChannel[i] = inL * smoothedGain * makeupLinear;
         if (rightChannel)
-            rightChannel[i] = inR * gainLinear * makeupLinear;
+            rightChannel[i] = inR * smoothedGain * makeupLinear;
     }
 
     // Smooth the gain reduction for metering

@@ -29,6 +29,7 @@ void DeEsser::reset()
     envelopeR = 0.0f;
     currentGainReduction = 0.0f;
     smoothedGainReduction = 0.0f;
+    smoothedGain = 1.0f;
 }
 
 void DeEsser::updateFilters()
@@ -103,6 +104,9 @@ void DeEsser::process(juce::AudioBuffer<float>& buffer)
     float maxGR = 0.0f;
     float thresholdLinear = DSPUtils::decibelsToLinear(threshold);
 
+    // Smoothing coefficient for gain changes (prevents clicks)
+    float gainSmoothCoeff = DSPUtils::calculateCoefficient(currentSampleRate, 2.0f);
+
     for (int i = 0; i < numSamples; ++i)
     {
         float inL = leftChannel[i];
@@ -131,7 +135,9 @@ void DeEsser::process(juce::AudioBuffer<float>& buffer)
         }
         maxGR = std::max(maxGR, gainReductionDb);
 
-        float gainLinear = DSPUtils::decibelsToLinear(-gainReductionDb);
+        // Smooth the gain to prevent clicks
+        float targetGain = DSPUtils::decibelsToLinear(-gainReductionDb);
+        smoothedGain += gainSmoothCoeff * (targetGain - smoothedGain);
 
         if (listenMode)
         {
@@ -143,24 +149,30 @@ void DeEsser::process(juce::AudioBuffer<float>& buffer)
         else if (mode == SplitBand)
         {
             // Split-band mode: only reduce gain in the high frequency band
+            // But crossfade with dry signal to avoid phase artifacts when not de-essing
             float lowL = processBiquad(inL, lowPassCoeffs, lpStateL);
             float highL = processBiquad(inL, highPassCoeffs, hpStateL);
+            float processedL = lowL + highL * smoothedGain;
 
-            leftChannel[i] = lowL + highL * gainLinear;
+            // Crossfade: when gain is 1.0 (no reduction), use dry signal
+            // When gain < 1.0, blend toward processed signal
+            float wetAmount = 1.0f - smoothedGain;  // 0 when no reduction, approaches 1 with more reduction
+            leftChannel[i] = inL * (1.0f - wetAmount) + processedL * wetAmount;
 
             if (rightChannel)
             {
                 float lowR = processBiquad(inR, lowPassCoeffs, lpStateR);
                 float highR = processBiquad(inR, highPassCoeffs, hpStateR);
-                rightChannel[i] = lowR + highR * gainLinear;
+                float processedR = lowR + highR * smoothedGain;
+                rightChannel[i] = inR * (1.0f - wetAmount) + processedR * wetAmount;
             }
         }
         else
         {
-            // Wideband mode: reduce gain of entire signal
-            leftChannel[i] = inL * gainLinear;
+            // Wideband mode: reduce gain of entire signal (no coloration when not active)
+            leftChannel[i] = inL * smoothedGain;
             if (rightChannel)
-                rightChannel[i] = inR * gainLinear;
+                rightChannel[i] = inR * smoothedGain;
         }
     }
 

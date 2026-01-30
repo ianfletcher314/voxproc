@@ -71,6 +71,7 @@ private:
     // Gain reduction
     float currentGainReduction = 0.0f;
     float smoothedGainReduction = 0.0f;
+    float smoothedGain = 1.0f;  // Smoothed gain for click-free de-essing
 
     float processBiquad(float input, const DSPUtils::BiquadCoeffs& coeffs, BiquadState& state);
 };

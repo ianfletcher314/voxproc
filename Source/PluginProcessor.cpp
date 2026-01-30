@@ -225,9 +225,17 @@ void VoxProcAudioProcessor::changeProgramName(int index, const juce::String& new
 
 void VoxProcAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    currentSampleRate = sampleRate;
     compressor.prepare(sampleRate, samplesPerBlock);
     deEsser.prepare(sampleRate, samplesPerBlock);
     equalizer.prepare(sampleRate, samplesPerBlock);
+
+    // Reset FFT buffers
+    inputFifo.fill(0.0f);
+    outputFifo.fill(0.0f);
+    inputSpectrum.fill(0.0f);
+    outputSpectrum.fill(0.0f);
+    fifoIndex = 0;
 }
 
 void VoxProcAudioProcessor::releaseResources()
@@ -266,6 +274,16 @@ void VoxProcAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     for (int ch = 0; ch < totalNumInputChannels; ++ch)
         inLevel = std::max(inLevel, buffer.getMagnitude(ch, 0, buffer.getNumSamples()));
     inputLevel.store(inLevel);
+
+    // Store input samples for FFT (mono mix of input after gain)
+    std::vector<float> inputSamples(buffer.getNumSamples());
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        float sum = 0.0f;
+        for (int ch = 0; ch < totalNumInputChannels; ++ch)
+            sum += buffer.getSample(ch, i);
+        inputSamples[i] = sum / totalNumInputChannels;
+    }
 
     // Update and process EQ (first in chain - signal flow: HPF -> EQ -> Compressor -> De-Esser)
     equalizer.setHPFFrequency(eqHPFFreq->load());
@@ -315,6 +333,19 @@ void VoxProcAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     for (int ch = 0; ch < totalNumInputChannels; ++ch)
         outLevel = std::max(outLevel, buffer.getMagnitude(ch, 0, buffer.getNumSamples()));
     outputLevel.store(outLevel);
+
+    // Store output samples for FFT (mono mix of output after all processing)
+    std::vector<float> outputSamples(buffer.getNumSamples());
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        float sum = 0.0f;
+        for (int ch = 0; ch < totalNumInputChannels; ++ch)
+            sum += buffer.getSample(ch, i);
+        outputSamples[i] = sum / totalNumInputChannels;
+    }
+
+    // Push samples to FFT
+    pushSamplesToFFT(inputSamples.data(), outputSamples.data(), buffer.getNumSamples());
 }
 
 void VoxProcAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
@@ -339,6 +370,49 @@ juce::AudioProcessorEditor* VoxProcAudioProcessor::createEditor()
 }
 
 bool VoxProcAudioProcessor::hasEditor() const { return true; }
+
+void VoxProcAudioProcessor::pushSamplesToFFT(const float* inputData, const float* outputData, int numSamples)
+{
+    for (int i = 0; i < numSamples; ++i)
+    {
+        inputFifo[fifoIndex] = inputData[i];
+        outputFifo[fifoIndex] = outputData[i];
+        fifoIndex++;
+
+        if (fifoIndex >= fftSize)
+        {
+            fifoIndex = 0;
+            processFFT();
+        }
+    }
+}
+
+void VoxProcAudioProcessor::processFFT()
+{
+    // Process input FFT
+    std::copy(inputFifo.begin(), inputFifo.end(), inputFFTData.begin());
+    std::fill(inputFFTData.begin() + fftSize, inputFFTData.end(), 0.0f);
+    window.multiplyWithWindowingTable(inputFFTData.data(), fftSize);
+    fft.performFrequencyOnlyForwardTransform(inputFFTData.data());
+
+    // Process output FFT
+    std::copy(outputFifo.begin(), outputFifo.end(), outputFFTData.begin());
+    std::fill(outputFFTData.begin() + fftSize, outputFFTData.end(), 0.0f);
+    window.multiplyWithWindowingTable(outputFFTData.data(), fftSize);
+    fft.performFrequencyOnlyForwardTransform(outputFFTData.data());
+
+    // Convert to magnitude spectrum with smoothing
+    const float smoothing = 0.7f;  // Higher = smoother but slower response
+    for (int i = 0; i < fftSize / 2; ++i)
+    {
+        float inputMag = inputFFTData[i] / (float)fftSize;
+        float outputMag = outputFFTData[i] / (float)fftSize;
+
+        // Smooth the spectrum for visual appeal
+        inputSpectrum[i] = inputSpectrum[i] * smoothing + inputMag * (1.0f - smoothing);
+        outputSpectrum[i] = outputSpectrum[i] * smoothing + outputMag * (1.0f - smoothing);
+    }
+}
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {

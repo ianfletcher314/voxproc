@@ -5,6 +5,10 @@
 #include "DSP/DeEsser.h"
 #include "DSP/Equalizer.h"
 
+// FFT size for spectrum analyzer
+static constexpr int fftOrder = 11;  // 2^11 = 2048 samples
+static constexpr int fftSize = 1 << fftOrder;
+
 class VoxProcAudioProcessor : public juce::AudioProcessor
 {
 public:
@@ -53,6 +57,31 @@ public:
 
     // DSP access for visualization
     const Equalizer& getEqualizer() const { return equalizer; }
+
+    // Update EQ parameters for visualization (call from editor timer)
+    void updateEQForVisualization()
+    {
+        equalizer.setHPFFrequency(eqHPFFreq->load());
+        equalizer.setHPFSlope(static_cast<int>(eqHPFSlope->load()) == 1 ? 24 : 12);
+        equalizer.setLowShelfFrequency(eqLowShelfFreq->load());
+        equalizer.setLowShelfGain(eqLowShelfGain->load());
+        equalizer.setLowMidFrequency(eqLowMidFreq->load());
+        equalizer.setLowMidGain(eqLowMidGain->load());
+        equalizer.setLowMidQ(eqLowMidQ->load());
+        equalizer.setMidFrequency(eqMidFreq->load());
+        equalizer.setMidGain(eqMidGain->load());
+        equalizer.setMidQ(eqMidQ->load());
+        equalizer.setHighMidFrequency(eqHighMidFreq->load());
+        equalizer.setHighMidGain(eqHighMidGain->load());
+        equalizer.setHighMidQ(eqHighMidQ->load());
+        equalizer.setHighShelfFrequency(eqHighShelfFreq->load());
+        equalizer.setHighShelfGain(eqHighShelfGain->load());
+    }
+
+    // Spectrum analyzer data
+    const std::array<float, fftSize / 2>& getInputSpectrum() const { return inputSpectrum; }
+    const std::array<float, fftSize / 2>& getOutputSpectrum() const { return outputSpectrum; }
+    double getCurrentSampleRate() const { return currentSampleRate; }
 
 private:
     juce::AudioProcessorValueTreeState apvts;
@@ -118,6 +147,25 @@ private:
     // Level metering
     std::atomic<float> inputLevel { 0.0f };
     std::atomic<float> outputLevel { 0.0f };
+
+    // FFT for spectrum analyzer
+    juce::dsp::FFT fft { fftOrder };
+    juce::dsp::WindowingFunction<float> window { fftSize, juce::dsp::WindowingFunction<float>::hann };
+
+    std::array<float, fftSize * 2> inputFFTData {};
+    std::array<float, fftSize * 2> outputFFTData {};
+    std::array<float, fftSize / 2> inputSpectrum {};
+    std::array<float, fftSize / 2> outputSpectrum {};
+
+    std::array<float, fftSize> inputFifo {};
+    std::array<float, fftSize> outputFifo {};
+    int fifoIndex = 0;
+    bool fftDataReady = false;
+
+    double currentSampleRate = 44100.0;
+
+    void pushSamplesToFFT(const float* inputData, const float* outputData, int numSamples);
+    void processFFT();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VoxProcAudioProcessor)
 };

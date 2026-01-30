@@ -51,4 +51,5 @@ private:
     float envelopeR = 0.0f;
     float currentGainReduction = 0.0f;
     float smoothedGainReduction = 0.0f;
+    float smoothedGain = 1.0f;  // Smoothed gain for click-free compression
 };
