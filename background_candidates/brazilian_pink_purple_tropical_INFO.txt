@@ -1,0 +1,38 @@
+Background Image Information
+============================
+
+Filename: brazilian_pink_purple_tropical.jpg
+
+Source: Unsplash (https://unsplash.com)
+Image URL: https://images.unsplash.com/photo-1490750967868-88aa4486c946
+Photographer: Search "pink tropical flowers" on Unsplash for attribution
+
+License: Unsplash License
+- Free for commercial and non-commercial use
+- No attribution required (but appreciated)
+- Cannot be sold without modification
+- Full license: https://unsplash.com/license
+
+Why it matches the VoxProc plugin color scheme:
+----------------------------------------------
+The VoxProc (Vocal Processor) plugin uses vibrant cool-toned colors:
+- Background: Dark blue-purple (#1a1a2e)
+- Compressor panel: Rich purple (#7b2d8e)
+- De-Esser panel: Hot pink (#c44b8e)
+- EQ panel: Teal green (#2d8e7b)
+- Text: Light lavender (#f0f0ff)
+- LED: Pink (#ff66aa)
+- Meter Green: Mint (#66ffaa)
+- LCD: Light mint (#aaffcc)
+
+This tropical flower image features:
+- Vibrant pink tones matching the de-esser panel and LED colors
+- Purple undertones complementing the compressor section
+- Soft organic feel appropriate for a vocal processing plugin
+- Brazilian tropical aesthetic (orchids and exotic flowers native to Brazil)
+
+Recommended usage:
+- Apply with low opacity (10-15%) to add warmth without overwhelming
+- The pink/purple palette enhances the feminine/vocal aesthetic
+- Works especially well behind the de-esser section
+- Creates a softer, more organic feel for vocal processing
